@@ -84,6 +84,8 @@
             const [showCode, setShowCode] = useState(false);
             const [showPast, setShowPast] = useState(false);
             const [view, setView] = useState('list');
+            const [groupBy, setGroupBy] = useState('none');
+            const [expandedGroups, setExpandedGroups] = useState({});
             const [newKid, setNewKid] = useState({ name: '', color: '#4ECDC4' });
             const [newAct, setNewAct] = useState({ 
                 kidId: '', 
@@ -206,6 +208,32 @@
             const upcoming = acts.filter(a => a.date >= today).sort((a, b) => a.date.localeCompare(b.date));
             const past = acts.filter(a => a.date < today).sort((a, b) => b.date.localeCompare(a.date));
 
+            const toggleGroup = (groupName) => {
+                setExpandedGroups(prev => ({ ...prev, [groupName]: !prev[groupName] }));
+            };
+
+            const groupActivities = (activities) => {
+                if (groupBy === 'none') return { 'All': activities };
+                
+                const grouped = {};
+                activities.forEach(a => {
+                    let key;
+                    if (groupBy === 'kid') {
+                        const kid = kids.find(k => k.id === a.kidId);
+                        key = kid?.name || 'Unknown';
+                    } else if (groupBy === 'type') {
+                        key = a.type || 'Other';
+                    } else if (groupBy === 'parent') {
+                        key = a.parent || 'Unknown';
+                    } else if (groupBy === 'title') {
+                        key = a.title;
+                    }
+                    if (!grouped[key]) grouped[key] = [];
+                    grouped[key].push(a);
+                });
+                return grouped;
+            };
+
             return (
                 <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
                     <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl p-6">
@@ -258,9 +286,18 @@
                         </div>
 
                         <div>
-                            <div className="flex justify-between mb-4">
+                            <div className="flex justify-between mb-4 flex-wrap gap-2">
                                 <h2 className="text-xl font-bold">Activities</h2>
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 flex-wrap">
+                                    {view === 'list' && (
+                                        <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 border rounded bg-white">
+                                            <option value="none">No Grouping</option>
+                                            <option value="title">Group by Activity</option>
+                                            <option value="kid">Group by Kid</option>
+                                            <option value="type">Group by Type</option>
+                                            <option value="parent">Group by Parent</option>
+                                        </select>
+                                    )}
                                     <button onClick={() => setView('list')} className={`px-3 py-2 rounded ${view === 'list' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>List</button>
                                     <button onClick={() => setView('calendar')} className={`px-3 py-2 rounded ${view === 'calendar' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Calendar</button>
                                     <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add</button>
@@ -344,24 +381,73 @@
                             ) : (
                                 <div className="space-y-3">
                                     <h3 className="font-bold text-lg">Upcoming</h3>
-                                    {upcoming.length === 0 ? <p className="text-gray-500 text-center py-4">No upcoming activities</p> : upcoming.map(a => {
-                                        const kid = kids.find(k => k.id === a.kidId);
-                                        return (
-                                            <div key={a.id} className="p-4 border-l-4 rounded shadow bg-white" style={{ borderLeftColor: kid?.color }}>
-                                                <div className="flex justify-between">
-                                                    <div>
-                                                        <h3 className="font-bold">
-                                                            {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
-                                                            {a.recurringId && <span className="ml-2 text-xs bg-purple-100 px-2 py-1 rounded">Recurring</span>}
-                                                        </h3>
-                                                        <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent} | {a.location}</p>
-                                                        {a.notes && <p className="text-sm text-gray-500 mt-1">{a.notes}</p>}
-                                                    </div>
-                                                    <button onClick={() => delAct(a.id)} className="text-red-500 text-xl">×</button>
+                                    {upcoming.length === 0 ? <p className="text-gray-500 text-center py-4">No upcoming activities</p> : (() => {
+                                        const grouped = groupActivities(upcoming);
+                                        return Object.keys(grouped).map(groupName => {
+                                            const groupActs = grouped[groupName];
+                                            const isExpanded = expandedGroups[groupName] !== false;
+                                            
+                                            if (groupBy === 'none') {
+                                                return groupActs.map(a => {
+                                                    const kid = kids.find(k => k.id === a.kidId);
+                                                    return (
+                                                        <div key={a.id} className="p-4 border-l-4 rounded shadow bg-white" style={{ borderLeftColor: kid?.color }}>
+                                                            <div className="flex justify-between">
+                                                                <div>
+                                                                    <h3 className="font-bold">
+                                                                        {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
+                                                                        {a.recurringId && <span className="ml-2 text-xs bg-purple-100 px-2 py-1 rounded">Recurring</span>}
+                                                                    </h3>
+                                                                    <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent} | {a.location}</p>
+                                                                    {a.notes && <p className="text-sm text-gray-500 mt-1">{a.notes}</p>}
+                                                                </div>
+                                                                <button onClick={() => delAct(a.id)} className="text-red-500 text-xl">×</button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                });
+                                            }
+                                            
+                                            return (
+                                                <div key={groupName} className="border rounded-lg overflow-hidden">
+                                                    <button
+                                                        onClick={() => toggleGroup(groupName)}
+                                                        className="w-full p-4 bg-gradient-to-r from-purple-50 to-blue-50 flex justify-between items-center hover:from-purple-100 hover:to-blue-100 transition"
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-2xl">{isExpanded ? '▼' : '▶'}</span>
+                                                            <div className="text-left">
+                                                                <h3 className="font-bold text-lg">{groupName}</h3>
+                                                                <p className="text-sm text-gray-600">{groupActs.length} {groupActs.length === 1 ? 'activity' : 'activities'}</p>
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                    {isExpanded && (
+                                                        <div className="p-2 space-y-2">
+                                                            {groupActs.map(a => {
+                                                                const kid = kids.find(k => k.id === a.kidId);
+                                                                return (
+                                                                    <div key={a.id} className="p-3 border-l-4 rounded bg-white shadow-sm" style={{ borderLeftColor: kid?.color }}>
+                                                                        <div className="flex justify-between">
+                                                                            <div>
+                                                                                <h4 className="font-semibold">
+                                                                                    {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
+                                                                                    {a.recurringId && <span className="ml-2 text-xs bg-purple-100 px-2 py-1 rounded">Recurring</span>}
+                                                                                </h4>
+                                                                                <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent} | {a.location}</p>
+                                                                                {a.notes && <p className="text-sm text-gray-500 mt-1">{a.notes}</p>}
+                                                                            </div>
+                                                                            <button onClick={() => delAct(a.id)} className="text-red-500 text-xl">×</button>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            </div>
-                                        );
-                                    })}
+                                            );
+                                        });
+                                    })()}
 
                                     {past.length > 0 && (
                                         <div className="mt-6">
