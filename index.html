@@ -204,39 +204,145 @@
                 setNlLoading(true);
 
                 try {
-                    const response = await fetch('/api/parse-activity', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text: nlText, kids })
+                    const text = nlText.toLowerCase().trim();
+                    const parsed = {};
+
+                    // Find kid name
+                    for (const kid of kids) {
+                        if (text.includes(kid.name.toLowerCase())) {
+                            parsed.kidId = kid.id;
+                            break;
+                        }
+                    }
+
+                    if (!parsed.kidId) {
+                        alert('Could not find kid name. Please mention one of: ' + kids.map(k => k.name).join(', '));
+                        setNlLoading(false);
+                        return;
+                    }
+
+                    // Find type (pick up, drop off)
+                    if (text.match(/pick\s*up|pickup/i)) {
+                        parsed.type = 'Pick Up';
+                    } else if (text.match(/drop\s*off|dropoff/i)) {
+                        parsed.type = 'Drop Off';
+                    } else {
+                        parsed.type = 'Other';
+                    }
+
+                    // Find parent
+                    if (text.match(/\bmom\b/i)) {
+                        parsed.parent = 'Mom';
+                    } else if (text.match(/\bdad\b/i)) {
+                        parsed.parent = 'Dad';
+                    } else if (text.match(/both|together/i)) {
+                        parsed.parent = 'Both';
+                    } else {
+                        parsed.parent = 'Mom';
+                    }
+
+                    // Find date
+                    const today = new Date();
+                    if (text.match(/\btoday\b/i)) {
+                        parsed.date = today.toISOString().split('T')[0];
+                    } else if (text.match(/\btomorrow\b/i)) {
+                        const tomorrow = new Date(today);
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        parsed.date = tomorrow.toISOString().split('T')[0];
+                    } else {
+                        // Check for day of week
+                        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                        for (let i = 0; i < days.length; i++) {
+                            if (text.includes(days[i])) {
+                                const targetDay = i;
+                                const currentDay = today.getDay();
+                                let daysToAdd = targetDay - currentDay;
+                                if (daysToAdd <= 0) daysToAdd += 7;
+                                const targetDate = new Date(today);
+                                targetDate.setDate(today.getDate() + daysToAdd);
+                                parsed.date = targetDate.toISOString().split('T')[0];
+                                break;
+                            }
+                        }
+                    }
+
+                    // Check for YYYY-MM-DD format
+                    const dateMatch = text.match(/\d{4}-\d{2}-\d{2}/);
+                    if (dateMatch) {
+                        parsed.date = dateMatch[0];
+                    }
+
+                    // Find time
+                    const timeMatch = text.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
+                    if (timeMatch) {
+                        let hours = parseInt(timeMatch[1]);
+                        const minutes = timeMatch[2] || '00';
+                        const ampm = timeMatch[3]?.toLowerCase();
+
+                        if (ampm === 'pm' && hours < 12) hours += 12;
+                        if (ampm === 'am' && hours === 12) hours = 0;
+
+                        parsed.time = `${String(hours).padStart(2, '0')}:${minutes}`;
+                    }
+
+                    // Find location (words after "at" or "location")
+                    const locationMatch = text.match(/\bat\s+([^,\.]+?)(?:\s+on|\s+at\s+\d|$)/i);
+                    if (locationMatch) {
+                        parsed.location = locationMatch[1].trim();
+                    }
+
+                    // Find activity title
+                    // Remove known patterns to extract title
+                    let titleText = text
+                        .replace(/(pick\s*up|drop\s*off)/gi, '')
+                        .replace(/\b(mom|dad|both)\b/gi, '')
+                        .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
+                        .replace(/\d{1,2}:?\d{0,2}\s*(am|pm)?/gi, '')
+                        .replace(/\bat\s+[^,\.]+/gi, '')
+                        .replace(/(has|have|needs?|going\s+to)/gi, '');
+
+                    // Clean up and extract meaningful words
+                    const titleWords = titleText.split(/\s+/).filter(w => 
+                        w.length > 2 && 
+                        !kids.some(k => k.name.toLowerCase() === w.toLowerCase())
+                    );
+
+                    if (titleWords.length > 0) {
+                        parsed.title = titleWords.slice(0, 3).join(' ').trim()
+                            .replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '');
+                    }
+
+                    // Capitalize first letter
+                    if (parsed.title) {
+                        parsed.title = parsed.title.charAt(0).toUpperCase() + parsed.title.slice(1);
+                    }
+
+                    if (parsed.location) {
+                        parsed.location = parsed.location.charAt(0).toUpperCase() + parsed.location.slice(1);
+                    }
+
+                    // Set defaults
+                    if (!parsed.title) parsed.title = 'Activity';
+                    if (!parsed.date) parsed.date = today.toISOString().split('T')[0];
+                    if (!parsed.location) parsed.location = '';
+
+                    setNewAct({
+                        kidId: parsed.kidId,
+                        title: parsed.title,
+                        date: parsed.date,
+                        time: parsed.time || '',
+                        location: parsed.location,
+                        parent: parsed.parent,
+                        notes: `Created from: "${nlText}"`,
+                        duration: 60,
+                        type: parsed.type,
+                        notify: false,
+                        recurring: 'none'
                     });
 
-                    if (!response.ok) throw new Error('Failed to parse');
-
-                    const parsed = await response.json();
-                    
-                    // Find kid by name
-                    const kid = kids.find(k => k.name.toLowerCase() === parsed.kidName?.toLowerCase());
-                    
-                    if (kid) {
-                        setNewAct({
-                            kidId: kid.id,
-                            title: parsed.title || '',
-                            date: parsed.date || '',
-                            time: parsed.time || '',
-                            location: parsed.location || '',
-                            parent: parsed.parent || 'Mom',
-                            notes: parsed.notes || '',
-                            duration: 60,
-                            type: parsed.type || 'Other',
-                            notify: false,
-                            recurring: 'none'
-                        });
-                        setShowNL(false);
-                        setShowAct(true);
-                        setNlText('');
-                    } else {
-                        alert('Could not find kid: ' + (parsed.kidName || 'unknown'));
-                    }
+                    setShowNL(false);
+                    setShowAct(true);
+                    setNlText('');
                 } catch (error) {
                     alert('Error parsing: ' + error.message);
                 }
@@ -355,7 +461,13 @@
                             {showNL && (
                                 <div className="mb-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
                                     <h3 className="font-bold text-lg mb-2">✨ Quick Add with Natural Language</h3>
-                                    <p className="text-sm text-gray-600 mb-3">Try: "Emma has soccer practice Tuesday at 4pm at the park" or "Pick up Liam tomorrow 3:30pm"</p>
+                                    <p className="text-sm text-gray-600 mb-2"><strong>Examples:</strong></p>
+                                    <ul className="text-sm text-gray-600 mb-3 list-disc ml-5">
+                                        <li>"Emma soccer practice Tuesday at 4pm at the park"</li>
+                                        <li>"Pick up Liam tomorrow 3:30pm"</li>
+                                        <li>"Drop off Sarah at school Friday 8am"</li>
+                                        <li>"Emma has piano today at 2pm with Mom"</li>
+                                    </ul>
                                     <textarea 
                                         value={nlText} 
                                         onChange={e => setNlText(e.target.value)}
