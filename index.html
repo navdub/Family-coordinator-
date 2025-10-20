@@ -87,7 +87,9 @@
             const [showAct, setShowAct] = useState(false);
             const [showCode, setShowCode] = useState(false);
             const [newKid, setNewKid] = useState({ name: '', color: '#4ECDC4' });
-            const [newAct, setNewAct] = useState({ kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60 });
+            const [newAct, setNewAct] = useState({ kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60, type: 'Pick Up', notify: false, recurring: 'none' });
+            const [view, setView] = useState('list');
+            const [showPast, setShowPast] = useState(false);
             const colors = ['#FF6B9D', '#4ECDC4', '#95E1D3', '#F38181', '#AA96DA'];
 
             const handleLogin = (c, n) => {
@@ -131,7 +133,7 @@
             const addAct = async () => {
                 if (!newAct.title || !newAct.kidId) return;
                 await db.collection('activities').add({ ...newAct, familyCode: code });
-                setNewAct({ kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60 });
+                setNewAct({ kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60, type: 'Pick Up' });
                 setShowAct(false);
             };
 
@@ -199,7 +201,11 @@
                         <div>
                             <div className="flex justify-between mb-4">
                                 <h2 className="text-xl font-bold">Activities</h2>
-                                <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add Activity</button>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setView('list')} className={`px-4 py-2 rounded-lg ${view === 'list' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>List</button>
+                                    <button onClick={() => setView('calendar')} className={`px-4 py-2 rounded-lg ${view === 'calendar' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Calendar</button>
+                                    <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add Activity</button>
+                                </div>
                             </div>
                             {showAct && (
                                 <div className="mb-4 p-4 bg-gray-50 rounded-lg">
@@ -216,26 +222,72 @@
                                         <option>Dad</option>
                                         <option>Both</option>
                                     </select>
+                                    <select value={newAct.type} onChange={e => setNewAct({ ...newAct, type: e.target.value })} className="w-full px-4 py-2 border rounded mb-2">
+                                        <option>Pick Up</option>
+                                        <option>Drop Off</option>
+                                        <option>Other</option>
+                                    </select>
                                     <button onClick={addAct} className="px-4 py-2 bg-green-500 text-white rounded mr-2">Add</button>
                                     <button onClick={() => setShowAct(false)} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
                                 </div>
                             )}
                             <div className="space-y-3">
-                                {upcoming.length === 0 ? <p className="text-gray-500 text-center py-8">No activities</p> : upcoming.map(a => {
-                                    const kid = kids.find(k => k.id === a.kidId);
-                                    return (
-                                        <div key={a.id} className="p-4 border-l-4 rounded shadow" style={{ borderLeftColor: kid?.color }}>
-                                            <div className="flex justify-between">
-                                                <div>
-                                                    <h3 className="font-bold">{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span></h3>
-                                                    <p className="text-sm text-gray-600">{a.date} {a.time} | {a.parent} | {a.location}</p>
-                                                    {a.notes && <p className="text-sm text-gray-500 mt-1">{a.notes}</p>}
+                                {view === 'calendar' ? (
+                                    <div className="grid grid-cols-7 gap-2">
+                                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                                            <div key={day} className="text-center font-bold p-2 bg-gray-100 rounded">{day}</div>
+                                        ))}
+                                        {(() => {
+                                            const today = new Date();
+                                            const year = today.getFullYear();
+                                            const month = today.getMonth();
+                                            const firstDay = new Date(year, month, 1).getDay();
+                                            const daysInMonth = new Date(year, month + 1, 0).getDate();
+                                            const days = [];
+                                            
+                                            for (let i = 0; i < firstDay; i++) {
+                                                days.push(<div key={`empty-${i}`} className="p-2 h-24 border rounded bg-gray-50"></div>);
+                                            }
+                                            
+                                            for (let day = 1; day <= daysInMonth; day++) {
+                                                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                                const dayActs = acts.filter(a => a.date === dateStr);
+                                                days.push(
+                                                    <div key={day} className="p-2 h-24 border rounded bg-white overflow-y-auto">
+                                                        <div className="font-semibold text-sm mb-1">{day}</div>
+                                                        {dayActs.map(a => {
+                                                            const kid = kids.find(k => k.id === a.kidId);
+                                                            return (
+                                                                <div key={a.id} className="text-xs p-1 mb-1 rounded" style={{ backgroundColor: kid?.color + '40', borderLeft: `2px solid ${kid?.color}` }}>
+                                                                    {a.time} {a.title}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                );
+                                            }
+                                            return days;
+                                        })()}
+                                    </div>
+                                ) : (
+                                    <>
+                                        {upcoming.length === 0 ? <p className="text-gray-500 text-center py-8">No activities</p> : upcoming.map(a => {
+                                            const kid = kids.find(k => k.id === a.kidId);
+                                            return (
+                                                <div key={a.id} className="p-4 border-l-4 rounded shadow" style={{ borderLeftColor: kid?.color }}>
+                                                    <div className="flex justify-between">
+                                                        <div>
+                                                            <h3 className="font-bold">{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span></h3>
+                                                            <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type || 'Other'} | {a.parent} | {a.location}</p>
+                                                            {a.notes && <p className="text-sm text-gray-500 mt-1">{a.notes}</p>}
+                                                        </div>
+                                                        <button onClick={() => delAct(a.id)} className="text-red-500">×</button>
+                                                    </div>
                                                 </div>
-                                                <button onClick={() => delAct(a.id)} className="text-red-500">×</button>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                                            );
+                                        })}
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>
