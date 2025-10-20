@@ -158,7 +158,10 @@
             };
 
             const delKid = async (id) => {
-                if (!confirm('Delete?')) return;
+                const kid = kids.find(k => k.id === id);
+                const kidActivities = acts.filter(a => a.kidId === id);
+                const confirmMsg = `Are you sure you want to delete ${kid?.name}?\n\nThis will also delete ${kidActivities.length} activities associated with ${kid?.name}.`;
+                if (!confirm(confirmMsg)) return;
                 await db.collection('kids').doc(id).delete();
                 const snap = await db.collection('activities').where('kidId', '==', id).get();
                 snap.forEach(d => d.ref.delete());
@@ -350,7 +353,10 @@
             };
 
             const delAct = async (id) => {
-                if (!confirm('Delete?')) return;
+                const activity = acts.find(a => a.id === id);
+                const kid = kids.find(k => k.id === activity?.kidId);
+                const confirmMsg = `Are you sure you want to delete this activity?\n\n${activity?.title} - ${kid?.name}\n${activity?.date} ${activity?.time}`;
+                if (!confirm(confirmMsg)) return;
                 await db.collection('activities').doc(id).delete();
             };
 
@@ -396,6 +402,59 @@
                                 <button onClick={() => setShowCode(true)} className="px-4 py-2 bg-purple-100 rounded-lg">Share</button>
                                 <button onClick={logout} className="px-4 py-2 bg-gray-100 rounded-lg">Logout</button>
                             </div>
+                        </div>
+
+                        {/* Quick Add Box - Prominent on landing */}
+                        <div className="mb-6 p-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl shadow-lg">
+                            <div className="flex justify-between items-center mb-3">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-white mb-1">✨ Quick Add Activity</h2>
+                                    <p className="text-blue-100 text-sm">Type naturally: "Emma soccer Tuesday at 4pm at the park"</p>
+                                </div>
+                                {!showNL && (
+                                    <button 
+                                        onClick={() => setShowNL(true)} 
+                                        className="px-6 py-3 bg-white text-blue-600 rounded-lg font-bold hover:bg-blue-50 transition shadow-md"
+                                    >
+                                        Start Typing
+                                    </button>
+                                )}
+                            </div>
+                            
+                            {showNL && (
+                                <div className="bg-white rounded-lg p-4">
+                                    <p className="text-sm text-gray-600 mb-2"><strong>Examples:</strong></p>
+                                    <ul className="text-xs text-gray-600 mb-3 list-disc ml-5 grid grid-cols-1 md:grid-cols-2 gap-1">
+                                        <li>"Emma soccer practice Tuesday at 4pm"</li>
+                                        <li>"Pick up Liam tomorrow 3:30pm"</li>
+                                        <li>"Drop off Sarah Friday 8am at school"</li>
+                                        <li>"Emma piano today at 2pm with Mom"</li>
+                                    </ul>
+                                    <textarea 
+                                        value={nlText} 
+                                        onChange={e => setNlText(e.target.value)}
+                                        placeholder="Type your activity in plain English..."
+                                        className="w-full px-4 py-3 border-2 border-blue-200 rounded-lg mb-3 focus:border-blue-500 focus:outline-none"
+                                        rows="3"
+                                        autoFocus
+                                    />
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={parseNaturalLanguage} 
+                                            disabled={nlLoading} 
+                                            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold"
+                                        >
+                                            {nlLoading ? '🔄 Parsing...' : '✨ Create Activity'}
+                                        </button>
+                                        <button 
+                                            onClick={() => { setShowNL(false); setNlText(''); }} 
+                                            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {showCode && (
@@ -453,36 +512,9 @@
                                     )}
                                     <button onClick={() => setView('list')} className={`px-3 py-2 rounded ${view === 'list' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>List</button>
                                     <button onClick={() => setView('calendar')} className={`px-3 py-2 rounded ${view === 'calendar' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Calendar</button>
-                                    <button onClick={() => setShowNL(true)} className="px-4 py-2 bg-blue-500 text-white rounded-lg">✨ Quick Add</button>
-                                    <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add</button>
+                                    <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add Detailed</button>
                                 </div>
                             </div>
-
-                            {showNL && (
-                                <div className="mb-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
-                                    <h3 className="font-bold text-lg mb-2">✨ Quick Add with Natural Language</h3>
-                                    <p className="text-sm text-gray-600 mb-2"><strong>Examples:</strong></p>
-                                    <ul className="text-sm text-gray-600 mb-3 list-disc ml-5">
-                                        <li>"Emma soccer practice Tuesday at 4pm at the park"</li>
-                                        <li>"Pick up Liam tomorrow 3:30pm"</li>
-                                        <li>"Drop off Sarah at school Friday 8am"</li>
-                                        <li>"Emma has piano today at 2pm with Mom"</li>
-                                    </ul>
-                                    <textarea 
-                                        value={nlText} 
-                                        onChange={e => setNlText(e.target.value)}
-                                        placeholder="Type your activity in plain English..."
-                                        className="w-full px-4 py-3 border rounded-lg mb-3"
-                                        rows="3"
-                                    />
-                                    <div className="flex gap-2">
-                                        <button onClick={parseNaturalLanguage} disabled={nlLoading} className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
-                                            {nlLoading ? '🔄 Parsing...' : '✨ Parse Activity'}
-                                        </button>
-                                        <button onClick={() => { setShowNL(false); setNlText(''); }} className="px-4 py-2 bg-gray-300 rounded-lg">Cancel</button>
-                                    </div>
-                                </div>
-                            )}
 
                             {showAct && (
                                 <div className="mb-4 p-4 bg-gray-50 rounded-lg">
