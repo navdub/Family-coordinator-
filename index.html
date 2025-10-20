@@ -9,19 +9,40 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-        }
-    </style>
+
+```
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<style>
+    body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    }
+</style>
+```
+
 </head>
 <body>
     <div id="root"></div>
 
 ```
 <script type="text/babel">
-    const { useState } = React;
+    const { useState, useEffect } = React;
+
+    // Initialize Firebase
+    const firebaseConfig = {
+        apiKey: "AIzaSyCsjCSABxbzg7c16g_kaP_TjiJkmwprTdM",
+        authDomain: "family-activity-tracker-8c417.firebaseapp.com",
+        projectId: "family-activity-tracker-8c417",
+        storageBucket: "family-activity-tracker-8c417.firebasestorage.app",
+        messagingSenderId: "434971947503",
+        appId: "1:434971947503:web:aa2d53068d9be28082861a"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
 
     // Lucide React icons as SVG components
     const Calendar = ({ className = "w-6 h-6" }) => (
@@ -77,36 +98,19 @@
         </svg>
     );
 
+    const RefreshCw = ({ className = "w-6 h-6" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+    );
+
     function FamilyActivityTracker() {
-        const [kids, setKids] = useState([
-            { id: 1, name: 'Emma', color: '#FF6B9D' },
-            { id: 2, name: 'Liam', color: '#4ECDC4' }
-        ]);
-        
-        const [activities, setActivities] = useState([
-            {
-                id: 1,
-                kidId: 1,
-                title: 'Soccer Practice',
-                date: '2025-10-22',
-                time: '16:00',
-                location: 'Community Field',
-                parent: 'Mom',
-                notes: 'Bring water bottle and cleats',
-                duration: 90
-            },
-            {
-                id: 2,
-                kidId: 2,
-                title: 'Piano Lesson',
-                date: '2025-10-23',
-                time: '15:30',
-                location: 'Music Academy',
-                parent: 'Dad',
-                notes: 'Practice scales before lesson',
-                duration: 60
-            }
-        ]);
+        const [kids, setKids] = useState([]);
+        const [activities, setActivities] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [syncing, setSyncing] = useState(false);
 
         const [showAddKid, setShowAddKid] = useState(false);
         const [showAddActivity, setShowAddActivity] = useState(false);
@@ -121,40 +125,109 @@
             notes: '',
             duration: 60
         });
-        const [view, setView] = useState('list');
 
-        const addKid = () => {
+        // Load data from Firebase on mount
+        useEffect(() => {
+            const unsubscribeKids = db.collection('kids').onSnapshot((snapshot) => {
+                const kidsData = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                setKids(kidsData);
+                setLoading(false);
+            });
+
+            const unsubscribeActivities = db.collection('activities').onSnapshot((snapshot) => {
+                const activitiesData = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                setActivities(activitiesData);
+            });
+
+            return () => {
+                unsubscribeKids();
+                unsubscribeActivities();
+            };
+        }, []);
+
+        const addKid = async () => {
             if (newKid.name.trim()) {
-                setKids([...kids, { id: Date.now(), ...newKid }]);
-                setNewKid({ name: '', color: '#4ECDC4' });
-                setShowAddKid(false);
+                setSyncing(true);
+                try {
+                    await db.collection('kids').add({
+                        name: newKid.name,
+                        color: newKid.color,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    setNewKid({ name: '', color: '#4ECDC4' });
+                    setShowAddKid(false);
+                } catch (error) {
+                    console.error('Error adding kid:', error);
+                    alert('Error adding kid. Please try again.');
+                }
+                setSyncing(false);
             }
         };
 
-        const removeKid = (id) => {
-            setKids(kids.filter(k => k.id !== id));
-            setActivities(activities.filter(a => a.kidId !== id));
+        const removeKid = async (id) => {
+            if (confirm('Delete this kid and all their activities?')) {
+                setSyncing(true);
+                try {
+                    await db.collection('kids').doc(id).delete();
+                    // Delete all activities for this kid
+                    const activitiesSnapshot = await db.collection('activities').where('kidId', '==', id).get();
+                    const batch = db.batch();
+                    activitiesSnapshot.docs.forEach(doc => {
+                        batch.delete(doc.ref);
+                    });
+                    await batch.commit();
+                } catch (error) {
+                    console.error('Error removing kid:', error);
+                    alert('Error removing kid. Please try again.');
+                }
+                setSyncing(false);
+            }
         };
 
-        const addActivity = () => {
+        const addActivity = async () => {
             if (newActivity.title && newActivity.date && newActivity.kidId) {
-                setActivities([...activities, { id: Date.now(), ...newActivity }]);
-                setNewActivity({
-                    kidId: '',
-                    title: '',
-                    date: '',
-                    time: '',
-                    location: '',
-                    parent: 'Mom',
-                    notes: '',
-                    duration: 60
-                });
-                setShowAddActivity(false);
+                setSyncing(true);
+                try {
+                    await db.collection('activities').add({
+                        ...newActivity,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    setNewActivity({
+                        kidId: '',
+                        title: '',
+                        date: '',
+                        time: '',
+                        location: '',
+                        parent: 'Mom',
+                        notes: '',
+                        duration: 60
+                    });
+                    setShowAddActivity(false);
+                } catch (error) {
+                    console.error('Error adding activity:', error);
+                    alert('Error adding activity. Please try again.');
+                }
+                setSyncing(false);
             }
         };
 
-        const removeActivity = (id) => {
-            setActivities(activities.filter(a => a.id !== id));
+        const removeActivity = async (id) => {
+            if (confirm('Delete this activity?')) {
+                setSyncing(true);
+                try {
+                    await db.collection('activities').doc(id).delete();
+                } catch (error) {
+                    console.error('Error removing activity:', error);
+                    alert('Error removing activity. Please try again.');
+                }
+                setSyncing(false);
+            }
         };
 
         const addToCalendar = (activity) => {
@@ -163,10 +236,9 @@
             const endDate = new Date(startDateTime);
             endDate.setMinutes(endDate.getMinutes() + activity.duration);
             
-            const eventTitle = `${activity.title} - ${kid.name}`;
+            const eventTitle = `${activity.title} - ${kid?.name || 'Unknown'}`;
             const eventDescription = `Parent: ${activity.parent}\n${activity.location ? `Location: ${activity.location}\n` : ''}${activity.notes ? `Notes: ${activity.notes}` : ''}`;
             
-            // Create ICS file for download
             const icsContent = [
                 'BEGIN:VCALENDAR',
                 'VERSION:2.0',
@@ -196,7 +268,7 @@
             const today = new Date().toISOString().split('T')[0];
             return activities
                 .filter(a => a.date >= today)
-                .sort((a, b) => new Date(a.date + ' ' + a.time) - new Date(b.date + ' ' + b.time));
+                .sort((a, b) => new Date(a.date + ' ' + (a.time || '00:00')) - new Date(b.date + ' ' + (b.time || '00:00')));
         };
 
         const formatDate = (dateStr) => {
@@ -205,6 +277,17 @@
         };
 
         const colorOptions = ['#FF6B9D', '#4ECDC4', '#95E1D3', '#F38181', '#AA96DA', '#FCBAD3', '#A8D8EA'];
+
+        if (loading) {
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+                    <div className="text-center">
+                        <RefreshCw className="w-12 h-12 text-purple-600 animate-spin mx-auto mb-4" />
+                        <p className="text-gray-600 text-lg">Loading your family activities...</p>
+                    </div>
+                </div>
+            );
+        }
 
         return (
             <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
@@ -215,6 +298,12 @@
                                 <Users className="w-8 h-8 text-purple-600" />
                                 <h1 className="text-3xl font-bold text-gray-800">Family Activity Coordinator</h1>
                             </div>
+                            {syncing && (
+                                <div className="flex items-center gap-2 text-purple-600">
+                                    <RefreshCw className="w-5 h-5 animate-spin" />
+                                    <span className="text-sm">Syncing...</span>
+                                </div>
+                            )}
                         </div>
 
                         {/* Kids Section */}
@@ -230,23 +319,27 @@
                                 </button>
                             </div>
 
-                            <div className="flex flex-wrap gap-3">
-                                {kids.map(kid => (
-                                    <div
-                                        key={kid.id}
-                                        className="flex items-center gap-2 px-4 py-2 rounded-full shadow-md"
-                                        style={{ backgroundColor: kid.color + '20', borderLeft: `4px solid ${kid.color}` }}
-                                    >
-                                        <span className="font-medium" style={{ color: kid.color }}>{kid.name}</span>
-                                        <button
-                                            onClick={() => removeKid(kid.id)}
-                                            className="text-gray-500 hover:text-red-500"
+                            {kids.length === 0 ? (
+                                <p className="text-gray-500 text-center py-4">No kids added yet. Add your first kid to get started!</p>
+                            ) : (
+                                <div className="flex flex-wrap gap-3">
+                                    {kids.map(kid => (
+                                        <div
+                                            key={kid.id}
+                                            className="flex items-center gap-2 px-4 py-2 rounded-full shadow-md"
+                                            style={{ backgroundColor: kid.color + '20', borderLeft: `4px solid ${kid.color}` }}
                                         >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
+                                            <span className="font-medium" style={{ color: kid.color }}>{kid.name}</span>
+                                            <button
+                                                onClick={() => removeKid(kid.id)}
+                                                className="text-gray-500 hover:text-red-500"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
 
                             {showAddKid && (
                                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
@@ -295,6 +388,7 @@
                                 <button
                                     onClick={() => setShowAddActivity(true)}
                                     className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition flex items-center gap-2"
+                                    disabled={kids.length === 0}
                                 >
                                     <Plus className="w-4 h-4" />
                                     Add Activity
@@ -307,7 +401,7 @@
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <select
                                             value={newActivity.kidId}
-                                            onChange={(e) => setNewActivity({ ...newActivity, kidId: Number(e.target.value) })}
+                                            onChange={(e) => setNewActivity({ ...newActivity, kidId: e.target.value })}
                                             className="px-4 py-2 border rounded-lg"
                                         >
                                             <option value="">Select Kid</option>
@@ -403,7 +497,7 @@
                                                                 className="px-3 py-1 rounded-full text-sm font-medium"
                                                                 style={{ backgroundColor: kid?.color + '20', color: kid?.color }}
                                                             >
-                                                                {kid?.name}
+                                                                {kid?.name || 'Unknown'}
                                                             </span>
                                                         </div>
                                                         <div className="space-y-1 text-sm text-gray-600">
