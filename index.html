@@ -81,6 +81,9 @@
             const [loading, setLoading] = useState(true);
             const [showKid, setShowKid] = useState(false);
             const [showAct, setShowAct] = useState(false);
+            const [showNL, setShowNL] = useState(false);
+            const [nlText, setNlText] = useState('');
+            const [nlLoading, setNlLoading] = useState(false);
             const [showCode, setShowCode] = useState(false);
             const [showPast, setShowPast] = useState(false);
             const [view, setView] = useState('list');
@@ -196,6 +199,50 @@
                 setShowAct(false);
             };
 
+            const parseNaturalLanguage = async () => {
+                if (!nlText.trim()) return;
+                setNlLoading(true);
+
+                try {
+                    const response = await fetch('/api/parse-activity', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: nlText, kids })
+                    });
+
+                    if (!response.ok) throw new Error('Failed to parse');
+
+                    const parsed = await response.json();
+                    
+                    // Find kid by name
+                    const kid = kids.find(k => k.name.toLowerCase() === parsed.kidName?.toLowerCase());
+                    
+                    if (kid) {
+                        setNewAct({
+                            kidId: kid.id,
+                            title: parsed.title || '',
+                            date: parsed.date || '',
+                            time: parsed.time || '',
+                            location: parsed.location || '',
+                            parent: parsed.parent || 'Mom',
+                            notes: parsed.notes || '',
+                            duration: 60,
+                            type: parsed.type || 'Other',
+                            notify: false,
+                            recurring: 'none'
+                        });
+                        setShowNL(false);
+                        setShowAct(true);
+                        setNlText('');
+                    } else {
+                        alert('Could not find kid: ' + (parsed.kidName || 'unknown'));
+                    }
+                } catch (error) {
+                    alert('Error parsing: ' + error.message);
+                }
+                setNlLoading(false);
+            };
+
             const delAct = async (id) => {
                 if (!confirm('Delete?')) return;
                 await db.collection('activities').doc(id).delete();
@@ -300,9 +347,30 @@
                                     )}
                                     <button onClick={() => setView('list')} className={`px-3 py-2 rounded ${view === 'list' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>List</button>
                                     <button onClick={() => setView('calendar')} className={`px-3 py-2 rounded ${view === 'calendar' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Calendar</button>
+                                    <button onClick={() => setShowNL(true)} className="px-4 py-2 bg-blue-500 text-white rounded-lg">✨ Quick Add</button>
                                     <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add</button>
                                 </div>
                             </div>
+
+                            {showNL && (
+                                <div className="mb-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
+                                    <h3 className="font-bold text-lg mb-2">✨ Quick Add with Natural Language</h3>
+                                    <p className="text-sm text-gray-600 mb-3">Try: "Emma has soccer practice Tuesday at 4pm at the park" or "Pick up Liam tomorrow 3:30pm"</p>
+                                    <textarea 
+                                        value={nlText} 
+                                        onChange={e => setNlText(e.target.value)}
+                                        placeholder="Type your activity in plain English..."
+                                        className="w-full px-4 py-3 border rounded-lg mb-3"
+                                        rows="3"
+                                    />
+                                    <div className="flex gap-2">
+                                        <button onClick={parseNaturalLanguage} disabled={nlLoading} className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
+                                            {nlLoading ? '🔄 Parsing...' : '✨ Parse Activity'}
+                                        </button>
+                                        <button onClick={() => { setShowNL(false); setNlText(''); }} className="px-4 py-2 bg-gray-300 rounded-lg">Cancel</button>
+                                    </div>
+                                </div>
+                            )}
 
                             {showAct && (
                                 <div className="mb-4 p-4 bg-gray-50 rounded-lg">
