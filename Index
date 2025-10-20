@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Activity Coordinator</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+```
+<script type="text/babel">
+    const { useState } = React;
+
+    // Lucide React icons as SVG components
+    const Calendar = ({ className = "w-6 h-6" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+    );
+
+    const Plus = ({ className = "w-6 h-6" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+    );
+
+    const X = ({ className = "w-6 h-6" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+    );
+
+    const Users = ({ className = "w-6 h-6" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+    );
+
+    const MapPin = ({ className = "w-6 h-6" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
+        </svg>
+    );
+
+    const Clock = ({ className = "w-6 h-6" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+    );
+
+    const User = ({ className = "w-6 h-6" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+            <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+    );
+
+    function FamilyActivityTracker() {
+        const [kids, setKids] = useState([
+            { id: 1, name: 'Emma', color: '#FF6B9D' },
+            { id: 2, name: 'Liam', color: '#4ECDC4' }
+        ]);
+        
+        const [activities, setActivities] = useState([
+            {
+                id: 1,
+                kidId: 1,
+                title: 'Soccer Practice',
+                date: '2025-10-22',
+                time: '16:00',
+                location: 'Community Field',
+                parent: 'Mom',
+                notes: 'Bring water bottle and cleats',
+                duration: 90
+            },
+            {
+                id: 2,
+                kidId: 2,
+                title: 'Piano Lesson',
+                date: '2025-10-23',
+                time: '15:30',
+                location: 'Music Academy',
+                parent: 'Dad',
+                notes: 'Practice scales before lesson',
+                duration: 60
+            }
+        ]);
+
+        const [showAddKid, setShowAddKid] = useState(false);
+        const [showAddActivity, setShowAddActivity] = useState(false);
+        const [newKid, setNewKid] = useState({ name: '', color: '#4ECDC4' });
+        const [newActivity, setNewActivity] = useState({
+            kidId: '',
+            title: '',
+            date: '',
+            time: '',
+            location: '',
+            parent: 'Mom',
+            notes: '',
+            duration: 60
+        });
+        const [view, setView] = useState('list');
+
+        const addKid = () => {
+            if (newKid.name.trim()) {
+                setKids([...kids, { id: Date.now(), ...newKid }]);
+                setNewKid({ name: '', color: '#4ECDC4' });
+                setShowAddKid(false);
+            }
+        };
+
+        const removeKid = (id) => {
+            setKids(kids.filter(k => k.id !== id));
+            setActivities(activities.filter(a => a.kidId !== id));
+        };
+
+        const addActivity = () => {
+            if (newActivity.title && newActivity.date && newActivity.kidId) {
+                setActivities([...activities, { id: Date.now(), ...newActivity }]);
+                setNewActivity({
+                    kidId: '',
+                    title: '',
+                    date: '',
+                    time: '',
+                    location: '',
+                    parent: 'Mom',
+                    notes: '',
+                    duration: 60
+                });
+                setShowAddActivity(false);
+            }
+        };
+
+        const removeActivity = (id) => {
+            setActivities(activities.filter(a => a.id !== id));
+        };
+
+        const addToCalendar = (activity) => {
+            const kid = kids.find(k => k.id === activity.kidId);
+            const startDateTime = `${activity.date}T${activity.time || '12:00'}:00`;
+            const endDate = new Date(startDateTime);
+            endDate.setMinutes(endDate.getMinutes() + activity.duration);
+            
+            const eventTitle = `${activity.title} - ${kid.name}`;
+            const eventDescription = `Parent: ${activity.parent}\n${activity.location ? `Location: ${activity.location}\n` : ''}${activity.notes ? `Notes: ${activity.notes}` : ''}`;
+            
+            // Create ICS file for download
+            const icsContent = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'PRODID:-//Family Activity Coordinator//EN',
+                'BEGIN:VEVENT',
+                `DTSTART:${startDateTime.replace(/[-:]/g, '')}`,
+                `DTEND:${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}`,
+                `SUMMARY:${eventTitle}`,
+                `DESCRIPTION:${eventDescription.replace(/\n/g, '\\n')}`,
+                `LOCATION:${activity.location || ''}`,
+                'END:VEVENT',
+                'END:VCALENDAR'
+            ].join('\n');
+
+            const blob = new Blob([icsContent], { type: 'text/calendar' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${eventTitle}.ics`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        };
+
+        const getUpcomingActivities = () => {
+            const today = new Date().toISOString().split('T')[0];
+            return activities
+                .filter(a => a.date >= today)
+                .sort((a, b) => new Date(a.date + ' ' + a.time) - new Date(b.date + ' ' + b.time));
+        };
+
+        const formatDate = (dateStr) => {
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        };
+
+        const colorOptions = ['#FF6B9D', '#4ECDC4', '#95E1D3', '#F38181', '#AA96DA', '#FCBAD3', '#A8D8EA'];
+
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
+                <div className="max-w-6xl mx-auto">
+                    <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3">
+                                <Users className="w-8 h-8 text-purple-600" />
+                                <h1 className="text-3xl font-bold text-gray-800">Family Activity Coordinator</h1>
+                            </div>
+                        </div>
+
+                        {/* Kids Section */}
+                        <div className="mb-8">
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-xl font-semibold text-gray-700">Kids</h2>
+                                <button
+                                    onClick={() => setShowAddKid(true)}
+                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center gap-2"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                    Add Kid
+                                </button>
+                            </div>
+
+                            <div className="flex flex-wrap gap-3">
+                                {kids.map(kid => (
+                                    <div
+                                        key={kid.id}
+                                        className="flex items-center gap-2 px-4 py-2 rounded-full shadow-md"
+                                        style={{ backgroundColor: kid.color + '20', borderLeft: `4px solid ${kid.color}` }}
+                                    >
+                                        <span className="font-medium" style={{ color: kid.color }}>{kid.name}</span>
+                                        <button
+                                            onClick={() => removeKid(kid.id)}
+                                            className="text-gray-500 hover:text-red-500"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {showAddKid && (
+                                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                                    <input
+                                        type="text"
+                                        placeholder="Kid's name"
+                                        value={newKid.name}
+                                        onChange={(e) => setNewKid({ ...newKid, name: e.target.value })}
+                                        className="w-full px-4 py-2 border rounded-lg mb-3"
+                                    />
+                                    <div className="flex gap-2 mb-3">
+                                        {colorOptions.map(color => (
+                                            <button
+                                                key={color}
+                                                onClick={() => setNewKid({ ...newKid, color })}
+                                                className="w-8 h-8 rounded-full border-2"
+                                                style={{
+                                                    backgroundColor: color,
+                                                    borderColor: newKid.color === color ? '#000' : '#fff'
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={addKid}
+                                            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                                        >
+                                            Add
+                                        </button>
+                                        <button
+                                            onClick={() => setShowAddKid(false)}
+                                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Activities Section */}
+                        <div>
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-xl font-semibold text-gray-700">Activities</h2>
+                                <button
+                                    onClick={() => setShowAddActivity(true)}
+                                    className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition flex items-center gap-2"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                    Add Activity
+                                </button>
+                            </div>
+
+                            {showAddActivity && (
+                                <div className="mb-6 p-6 bg-gray-50 rounded-lg">
+                                    <h3 className="font-semibold mb-4 text-gray-700">New Activity</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <select
+                                            value={newActivity.kidId}
+                                            onChange={(e) => setNewActivity({ ...newActivity, kidId: Number(e.target.value) })}
+                                            className="px-4 py-2 border rounded-lg"
+                                        >
+                                            <option value="">Select Kid</option>
+                                            {kids.map(kid => (
+                                                <option key={kid.id} value={kid.id}>{kid.name}</option>
+                                            ))}
+                                        </select>
+                                        <input
+                                            type="text"
+                                            placeholder="Activity title"
+                                            value={newActivity.title}
+                                            onChange={(e) => setNewActivity({ ...newActivity, title: e.target.value })}
+                                            className="px-4 py-2 border rounded-lg"
+                                        />
+                                        <input
+                                            type="date"
+                                            value={newActivity.date}
+                                            onChange={(e) => setNewActivity({ ...newActivity, date: e.target.value })}
+                                            className="px-4 py-2 border rounded-lg"
+                                        />
+                                        <input
+                                            type="time"
+                                            value={newActivity.time}
+                                            onChange={(e) => setNewActivity({ ...newActivity, time: e.target.value })}
+                                            className="px-4 py-2 border rounded-lg"
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Location"
+                                            value={newActivity.location}
+                                            onChange={(e) => setNewActivity({ ...newActivity, location: e.target.value })}
+                                            className="px-4 py-2 border rounded-lg"
+                                        />
+                                        <select
+                                            value={newActivity.parent}
+                                            onChange={(e) => setNewActivity({ ...newActivity, parent: e.target.value })}
+                                            className="px-4 py-2 border rounded-lg"
+                                        >
+                                            <option value="Mom">Mom</option>
+                                            <option value="Dad">Dad</option>
+                                            <option value="Both">Both</option>
+                                        </select>
+                                        <input
+                                            type="number"
+                                            placeholder="Duration (minutes)"
+                                            value={newActivity.duration}
+                                            onChange={(e) => setNewActivity({ ...newActivity, duration: Number(e.target.value) })}
+                                            className="px-4 py-2 border rounded-lg"
+                                        />
+                                        <textarea
+                                            placeholder="Notes"
+                                            value={newActivity.notes}
+                                            onChange={(e) => setNewActivity({ ...newActivity, notes: e.target.value })}
+                                            className="px-4 py-2 border rounded-lg md:col-span-2"
+                                            rows="2"
+                                        />
+                                    </div>
+                                    <div className="flex gap-2 mt-4">
+                                        <button
+                                            onClick={addActivity}
+                                            className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                                        >
+                                            Add Activity
+                                        </button>
+                                        <button
+                                            onClick={() => setShowAddActivity(false)}
+                                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Activities List */}
+                            <div className="space-y-4">
+                                {getUpcomingActivities().length === 0 ? (
+                                    <p className="text-gray-500 text-center py-8">No upcoming activities. Add one to get started!</p>
+                                ) : (
+                                    getUpcomingActivities().map(activity => {
+                                        const kid = kids.find(k => k.id === activity.kidId);
+                                        return (
+                                            <div
+                                                key={activity.id}
+                                                className="p-4 rounded-lg shadow-md border-l-4 hover:shadow-lg transition"
+                                                style={{ borderLeftColor: kid?.color || '#gray' }}
+                                            >
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-3 mb-2">
+                                                            <h3 className="text-lg font-semibold text-gray-800">{activity.title}</h3>
+                                                            <span
+                                                                className="px-3 py-1 rounded-full text-sm font-medium"
+                                                                style={{ backgroundColor: kid?.color + '20', color: kid?.color }}
+                                                            >
+                                                                {kid?.name}
+                                                            </span>
+                                                        </div>
+                                                        <div className="space-y-1 text-sm text-gray-600">
+                                                            <div className="flex items-center gap-2">
+                                                                <Calendar className="w-4 h-4" />
+                                                                {formatDate(activity.date)}
+                                                                {activity.time && (
+                                                                    <>
+                                                                        <Clock className="w-4 h-4 ml-2" />
+                                                                        {activity.time}
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                            {activity.location && (
+                                                                <div className="flex items-center gap-2">
+                                                                    <MapPin className="w-4 h-4" />
+                                                                    {activity.location}
+                                                                </div>
+                                                            )}
+                                                            <div className="flex items-center gap-2">
+                                                                <User className="w-4 h-4" />
+                                                                {activity.parent}
+                                                            </div>
+                                                            {activity.notes && (
+                                                                <p className="text-gray-500 mt-2">{activity.notes}</p>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => addToCalendar(activity)}
+                                                            className="px-3 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition text-sm"
+                                                        >
+                                                            Add to Calendar
+                                                        </button>
+                                                        <button
+                                                            onClick={() => removeActivity(activity.id)}
+                                                            className="text-gray-400 hover:text-red-500"
+                                                        >
+                                                            <X className="w-5 h-5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<FamilyActivityTracker />);
+</script>
+```
+
+</body>
+</html>
