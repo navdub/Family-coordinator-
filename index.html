@@ -8,615 +8,242 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    
-    <style>
-        body {
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-        }
-    </style>
 </head>
 <body>
     <div id="root"></div>
-
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // Initialize Firebase
-        const firebaseConfig = {
+        firebase.initializeApp({
             apiKey: "AIzaSyCsjCSABxbzg7c16g_kaP_TjiJkmwprTdM",
             authDomain: "family-activity-tracker-8c417.firebaseapp.com",
             projectId: "family-activity-tracker-8c417",
             storageBucket: "family-activity-tracker-8c417.firebasestorage.app",
             messagingSenderId: "434971947503",
             appId: "1:434971947503:web:aa2d53068d9be28082861a"
-        };
-
-        firebase.initializeApp(firebaseConfig);
+        });
         const db = firebase.firestore();
 
-        // Lucide React icons as SVG components
-        const Calendar = ({ className = "w-6 h-6" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-        );
+        function Icon({ d, className = "w-6 h-6" }) {
+            return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d={d} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"/></svg>;
+        }
 
-        const Plus = ({ className = "w-6 h-6" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-        );
-
-        const X = ({ className = "w-6 h-6" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-        );
-
-        const Users = ({ className = "w-6 h-6" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-        );
-
-        const MapPin = ({ className = "w-6 h-6" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                <circle cx="12" cy="10" r="3"></circle>
-            </svg>
-        );
-
-        const Clock = ({ className = "w-6 h-6" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-        );
-
-        const User = ({ className = "w-6 h-6" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
-            </svg>
-        );
-
-        const RefreshCw = ({ className = "w-6 h-6" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <polyline points="1 20 1 14 7 14"></polyline>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-        );
-
-        const Key = ({ className = "w-6 h-6" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
-            </svg>
-        );
-
-        const LogOut = ({ className = "w-6 h-6" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                <polyline points="16 17 21 12 16 7"></polyline>
-                <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-        );
-
-        const Copy = ({ className = "w-6 h-6" }) => (
-            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-        );
-
-        function FamilyCodeLogin({ onLogin }) {
+        function LoginScreen({ onLogin }) {
             const [code, setCode] = useState('');
-            const [familyName, setFamilyName] = useState('');
-            const [isCreating, setIsCreating] = useState(false);
-            const [error, setError] = useState('');
-            const [loading, setLoading] = useState(false);
+            const [name, setName] = useState('');
+            const [isNew, setIsNew] = useState(false);
+            const [err, setErr] = useState('');
 
-            const generateCode = () => {
-                return Math.random().toString(36).substring(2, 10).toUpperCase();
+            const login = async () => {
+                if (!code) return setErr('Enter code');
+                try {
+                    const doc = await db.collection('families').doc(code.toUpperCase()).get();
+                    if (doc.exists) onLogin(code.toUpperCase(), doc.data().name);
+                    else setErr('Code not found');
+                } catch (e) { setErr('Error: ' + e.message); }
             };
 
-            const handleLogin = async () => {
-                if (!code.trim()) {
-                    setError('Please enter a family code');
-                    return;
-                }
-
-                setLoading(true);
-                setError('');
-
+            const create = async () => {
+                if (!name) return setErr('Enter name');
+                const newCode = Math.random().toString(36).substring(2, 10).toUpperCase();
                 try {
-                    const familyDoc = await db.collection('families').doc(code.toUpperCase()).get();
-                    
-                    if (familyDoc.exists) {
-                        onLogin(code.toUpperCase(), familyDoc.data().name);
-                    } else {
-                        setError('Family code not found. Please check the code or create a new family.');
-                    }
-                } catch (err) {
-                    setError('Error connecting. Please try again.');
-                    console.error(err);
-                }
-
-                setLoading(false);
-            };
-
-            const handleCreateFamily = async () => {
-                if (!familyName.trim()) {
-                    setError('Please enter a family name');
-                    return;
-                }
-
-                setLoading(true);
-                setError('');
-
-                try {
-                    const newCode = generateCode();
-                    await db.collection('families').doc(newCode).set({
-                        name: familyName,
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-
-                    onLogin(newCode, familyName);
-                } catch (err) {
-                    setError('Error creating family. Please try again.');
-                    console.error(err);
-                }
-
-                setLoading(false);
+                    await db.collection('families').doc(newCode).set({ name, createdAt: new Date() });
+                    onLogin(newCode, name);
+                } catch (e) { setErr('Error: ' + e.message); }
             };
 
             return (
                 <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-                        <div className="text-center mb-8">
-                            <Users className="w-16 h-16 text-purple-600 mx-auto mb-4" />
-                            <h1 className="text-3xl font-bold text-gray-800 mb-2">Family Activity Coordinator</h1>
-                            <p className="text-gray-600">Share activities and coordinate with your family</p>
-                        </div>
-
-                        {error && (
-                            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
-                                {error}
-                            </div>
-                        )}
-
-                        {!isCreating ? (
-                            <div>
-                                <h2 className="text-xl font-semibold text-gray-700 mb-4">Enter Family Code</h2>
-                                <input
-                                    type="text"
-                                    placeholder="Enter your family code"
-                                    value={code}
-                                    onChange={(e) => setCode(e.target.value.toUpperCase())}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 text-lg font-mono uppercase"
-                                    onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
-                                />
-                                <button
-                                    onClick={handleLogin}
-                                    disabled={loading}
-                                    className="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition font-semibold mb-4 disabled:opacity-50"
-                                >
-                                    {loading ? 'Connecting...' : 'Access My Family'}
-                                </button>
-                                <div className="text-center">
-                                    <button
-                                        onClick={() => setIsCreating(true)}
-                                        className="text-purple-600 hover:text-purple-700 font-medium"
-                                    >
-                                        Create New Family →
-                                    </button>
-                                </div>
-                            </div>
+                        <h1 className="text-3xl font-bold text-center mb-6">Family Activity Tracker</h1>
+                        {err && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{err}</div>}
+                        {!isNew ? (
+                            <>
+                                <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="Family Code" className="w-full px-4 py-3 border rounded-lg mb-4 uppercase" />
+                                <button onClick={login} className="w-full bg-purple-600 text-white py-3 rounded-lg mb-3">Login</button>
+                                <button onClick={() => setIsNew(true)} className="text-purple-600">Create Family →</button>
+                            </>
                         ) : (
-                            <div>
-                                <h2 className="text-xl font-semibold text-gray-700 mb-4">Create New Family</h2>
-                                <input
-                                    type="text"
-                                    placeholder="Enter family name (e.g., The Smiths)"
-                                    value={familyName}
-                                    onChange={(e) => setFamilyName(e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4"
-                                    onKeyPress={(e) => e.key === 'Enter' && handleCreateFamily()}
-                                />
-                                <button
-                                    onClick={handleCreateFamily}
-                                    disabled={loading}
-                                    className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition font-semibold mb-4 disabled:opacity-50"
-                                >
-                                    {loading ? 'Creating...' : 'Create Family'}
-                                </button>
-                                <div className="text-center">
-                                    <button
-                                        onClick={() => setIsCreating(false)}
-                                        className="text-gray-600 hover:text-gray-700 font-medium"
-                                    >
-                                        ← Back to Login
-                                    </button>
-                                </div>
-                                <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                                    <p className="text-sm text-gray-600">
-                                        💡 You'll receive a unique family code that you can share with other family members to give them access.
-                                    </p>
-                                </div>
-                            </div>
+                            <>
+                                <input value={name} onChange={e => setName(e.target.value)} placeholder="Family Name" className="w-full px-4 py-3 border rounded-lg mb-4" />
+                                <button onClick={create} className="w-full bg-green-600 text-white py-3 rounded-lg mb-3">Create</button>
+                                <button onClick={() => setIsNew(false)} className="text-gray-600">← Back</button>
+                            </>
                         )}
                     </div>
                 </div>
             );
         }
 
-        function FamilyActivityTracker() {
-            const [familyCode, setFamilyCode] = useState(() => localStorage.getItem('familyCode'));
-            const [familyName, setFamilyName] = useState(() => localStorage.getItem('familyName'));
+        function App() {
+            const [code, setCode] = useState(localStorage.getItem('familyCode'));
+            const [name, setName] = useState(localStorage.getItem('familyName'));
             const [kids, setKids] = useState([]);
-            const [activities, setActivities] = useState([]);
+            const [acts, setActs] = useState([]);
             const [loading, setLoading] = useState(true);
-            const [syncing, setSyncing] = useState(false);
-            const [showCodeModal, setShowCodeModal] = useState(false);
-            const [codeCopied, setCodeCopied] = useState(false);
-
-            const [showAddKid, setShowAddKid] = useState(false);
-            const [showAddActivity, setShowAddActivity] = useState(false);
+            const [showKid, setShowKid] = useState(false);
+            const [showAct, setShowAct] = useState(false);
+            const [showCode, setShowCode] = useState(false);
             const [newKid, setNewKid] = useState({ name: '', color: '#4ECDC4' });
-            const [newActivity, setNewActivity] = useState({
-                kidId: '',
-                title: '',
-                date: '',
-                time: '',
-                location: '',
-                parent: 'Mom',
-                notes: '',
-                duration: 60
-            });
+            const [newAct, setNewAct] = useState({ kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60 });
+            const colors = ['#FF6B9D', '#4ECDC4', '#95E1D3', '#F38181', '#AA96DA'];
 
-            const handleLogin = (code, name) => {
-                setFamilyCode(code);
-                setFamilyName(name);
-                localStorage.setItem('familyCode', code);
-                localStorage.setItem('familyName', name);
+            const handleLogin = (c, n) => {
+                setCode(c);
+                setName(n);
+                localStorage.setItem('familyCode', c);
+                localStorage.setItem('familyName', n);
             };
 
-            const handleLogout = () => {
-                if (confirm('Are you sure you want to logout?')) {
-                    localStorage.removeItem('familyCode');
-                    localStorage.removeItem('familyName');
-                    setFamilyCode(null);
-                    setFamilyName(null);
-                }
+            const logout = () => {
+                localStorage.clear();
+                setCode(null);
             };
 
-            const copyFamilyCode = () => {
-                navigator.clipboard.writeText(familyCode);
-                setCodeCopied(true);
-                setTimeout(() => setCodeCopied(false), 2000);
-            };
-
-            // Load data from Firebase when family code is set
             useEffect(() => {
-                if (!familyCode) {
+                if (!code) return setLoading(false);
+                const unsub1 = db.collection('kids').where('familyCode', '==', code).onSnapshot(s => {
+                    setKids(s.docs.map(d => ({ id: d.id, ...d.data() })));
                     setLoading(false);
-                    return;
-                }
-
-                const unsubscribeKids = db.collection('kids')
-                    .where('familyCode', '==', familyCode)
-                    .onSnapshot((snapshot) => {
-                        const kidsData = snapshot.docs.map(doc => ({
-                            id: doc.id,
-                            ...doc.data()
-                        }));
-                        setKids(kidsData);
-                        setLoading(false);
-                    });
-
-                const unsubscribeActivities = db.collection('activities')
-                    .where('familyCode', '==', familyCode)
-                    .onSnapshot((snapshot) => {
-                        const activitiesData = snapshot.docs.map(doc => ({
-                            id: doc.id,
-                            ...doc.data()
-                        }));
-                        setActivities(activitiesData);
-                    });
-
-                return () => {
-                    unsubscribeKids();
-                    unsubscribeActivities();
-                };
-            }, [familyCode]);
+                });
+                const unsub2 = db.collection('activities').where('familyCode', '==', code).onSnapshot(s => {
+                    setActs(s.docs.map(d => ({ id: d.id, ...d.data() })));
+                });
+                return () => { unsub1(); unsub2(); };
+            }, [code]);
 
             const addKid = async () => {
-                if (newKid.name.trim()) {
-                    setSyncing(true);
-                    try {
-                        await db.collection('kids').add({
-                            name: newKid.name,
-                            color: newKid.color,
-                            familyCode: familyCode,
-                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                        setNewKid({ name: '', color: '#4ECDC4' });
-                        setShowAddKid(false);
-                    } catch (error) {
-                        console.error('Error adding kid:', error);
-                        alert('Error adding kid. Please try again.');
-                    }
-                    setSyncing(false);
-                }
+                if (!newKid.name) return;
+                await db.collection('kids').add({ ...newKid, familyCode: code });
+                setNewKid({ name: '', color: '#4ECDC4' });
+                setShowKid(false);
             };
 
-            const removeKid = async (id) => {
-                if (confirm('Delete this kid and all their activities?')) {
-                    setSyncing(true);
-                    try {
-                        await db.collection('kids').doc(id).delete();
-                        const activitiesSnapshot = await db.collection('activities')
-                            .where('kidId', '==', id)
-                            .where('familyCode', '==', familyCode)
-                            .get();
-                        const batch = db.batch();
-                        activitiesSnapshot.docs.forEach(doc => {
-                            batch.delete(doc.ref);
-                        });
-                        await batch.commit();
-                    } catch (error) {
-                        console.error('Error removing kid:', error);
-                        alert('Error removing kid. Please try again.');
-                    }
-                    setSyncing(false);
-                }
+            const delKid = async (id) => {
+                if (!confirm('Delete?')) return;
+                await db.collection('kids').doc(id).delete();
+                const snap = await db.collection('activities').where('kidId', '==', id).get();
+                snap.forEach(d => d.ref.delete());
             };
 
-            const addActivity = async () => {
-                if (newActivity.title && newActivity.date && newActivity.kidId) {
-                    setSyncing(true);
-                    try {
-                        await db.collection('activities').add({
-                            ...newActivity,
-                            familyCode: familyCode,
-                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                        });
-                        setNewActivity({
-                            kidId: '',
-                            title: '',
-                            date: '',
-                            time: '',
-                            location: '',
-                            parent: 'Mom',
-                            notes: '',
-                            duration: 60
-                        });
-                        setShowAddActivity(false);
-                    } catch (error) {
-                        console.error('Error adding activity:', error);
-                        alert('Error adding activity. Please try again.');
-                    }
-                    setSyncing(false);
-                }
+            const addAct = async () => {
+                if (!newAct.title || !newAct.kidId) return;
+                await db.collection('activities').add({ ...newAct, familyCode: code });
+                setNewAct({ kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60 });
+                setShowAct(false);
             };
 
-            const removeActivity = async (id) => {
-                if (confirm('Delete this activity?')) {
-                    setSyncing(true);
-                    try {
-                        await db.collection('activities').doc(id).delete();
-                    } catch (error) {
-                        console.error('Error removing activity:', error);
-                        alert('Error removing activity. Please try again.');
-                    }
-                    setSyncing(false);
-                }
+            const delAct = async (id) => {
+                if (!confirm('Delete?')) return;
+                await db.collection('activities').doc(id).delete();
             };
 
-            const addToCalendar = (activity) => {
-                const kid = kids.find(k => k.id === activity.kidId);
-                const startDateTime = `${activity.date}T${activity.time || '12:00'}:00`;
-                const endDate = new Date(startDateTime);
-                endDate.setMinutes(endDate.getMinutes() + activity.duration);
-                
-                const eventTitle = `${activity.title} - ${kid?.name || 'Unknown'}`;
-                const eventDescription = `Parent: ${activity.parent}\n${activity.location ? `Location: ${activity.location}\n` : ''}${activity.notes ? `Notes: ${activity.notes}` : ''}`;
-                
-                const icsContent = [
-                    'BEGIN:VCALENDAR',
-                    'VERSION:2.0',
-                    'PRODID:-//Family Activity Coordinator//EN',
-                    'BEGIN:VEVENT',
-                    `DTSTART:${startDateTime.replace(/[-:]/g, '')}`,
-                    `DTEND:${endDate.toISOString().replace(/[-:]/g, '').split('.')[0]}`,
-                    `SUMMARY:${eventTitle}`,
-                    `DESCRIPTION:${eventDescription.replace(/\n/g, '\\n')}`,
-                    `LOCATION:${activity.location || ''}`,
-                    'END:VEVENT',
-                    'END:VCALENDAR'
-                ].join('\n');
+            if (!code) return <LoginScreen onLogin={handleLogin} />;
+            if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-xl">Loading...</div></div>;
 
-                const blob = new Blob([icsContent], { type: 'text/calendar' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${eventTitle}.ics`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-            };
-
-            const getUpcomingActivities = () => {
-                const today = new Date().toISOString().split('T')[0];
-                return activities
-                    .filter(a => a.date >= today)
-                    .sort((a, b) => new Date(a.date + ' ' + (a.time || '00:00')) - new Date(b.date + ' ' + (b.time || '00:00')));
-            };
-
-            const formatDate = (dateStr) => {
-                const date = new Date(dateStr);
-                return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-            };
-
-            const colorOptions = ['#FF6B9D', '#4ECDC4', '#95E1D3', '#F38181', '#AA96DA', '#FCBAD3', '#A8D8EA'];
-
-            if (!familyCode) {
-                return <FamilyCodeLogin onLogin={handleLogin} />;
-            }
-
-            if (loading) {
-                return (
-                    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
-                        <div className="text-center">
-                            <RefreshCw className="w-12 h-12 text-purple-600 animate-spin mx-auto mb-4" />
-                            <p className="text-gray-600 text-lg">Loading your family activities...</p>
-                        </div>
-                    </div>
-                );
-            }
+            const upcoming = acts.filter(a => a.date >= new Date().toISOString().split('T')[0]).sort((a, b) => a.date.localeCompare(b.date));
 
             return (
                 <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
-                    <div className="max-w-6xl mx-auto">
-                        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
-                            <div className="flex items-center justify-between mb-6">
-                                <div className="flex items-center gap-3">
-                                    <Users className="w-8 h-8 text-purple-600" />
-                                    <div>
-                                        <h1 className="text-3xl font-bold text-gray-800">{familyName}</h1>
-                                        <p className="text-sm text-gray-500">Family Activity Coordinator</p>
+                    <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h1 className="text-3xl font-bold">{name}</h1>
+                            <div className="flex gap-2">
+                                <button onClick={() => setShowCode(true)} className="px-4 py-2 bg-purple-100 rounded-lg">Share Code</button>
+                                <button onClick={logout} className="px-4 py-2 bg-gray-100 rounded-lg">Logout</button>
+                            </div>
+                        </div>
+
+                        {showCode && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                                <div className="bg-white rounded-2xl p-8 max-w-md">
+                                    <h2 className="text-2xl font-bold mb-4">Family Code</h2>
+                                    <div className="bg-purple-50 p-4 rounded-lg mb-4">
+                                        <p className="text-3xl font-mono text-center text-purple-600">{code}</p>
                                     </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    {syncing && (
-                                        <div className="flex items-center gap-2 text-purple-600">
-                                            <RefreshCw className="w-5 h-5 animate-spin" />
-                                            <span className="text-sm">Syncing...</span>
-                                        </div>
-                                    )}
-                                    <button
-                                        onClick={() => setShowCodeModal(true)}
-                                        className="px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition flex items-center gap-2"
-                                    >
-                                        <Key className="w-4 h-4" />
-                                        Share Code
-                                    </button>
-                                    <button
-                                        onClick={handleLogout}
-                                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center gap-2"
-                                    >
-                                        <LogOut className="w-4 h-4" />
-                                        Logout
-                                    </button>
+                                    <button onClick={() => { navigator.clipboard.writeText(code); alert('Copied!'); }} className="w-full bg-purple-600 text-white py-3 rounded-lg mb-2">Copy Code</button>
+                                    <button onClick={() => setShowCode(false)} className="w-full bg-gray-200 py-3 rounded-lg">Close</button>
                                 </div>
                             </div>
+                        )}
 
-                            {/* Family Code Modal */}
-                            {showCodeModal && (
-                                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                                    <div className="bg-white rounded-2xl p-8 max-w-md w-full">
-                                        <h2 className="text-2xl font-bold text-gray-800 mb-4">Your Family Code</h2>
-                                        <p className="text-gray-600 mb-4">Share this code with family members so they can access your shared activities:</p>
-                                        <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4 mb-4">
-                                            <p className="text-3xl font-mono font-bold text-purple-600 text-center tracking-wider">
-                                                {familyCode}
-                                            </p>
-                                        </div>
-                                        <button
-                                            onClick={copyFamilyCode}
-                                            className="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition font-semibold mb-3 flex items-center justify-center gap-2"
-                                        >
-                                            <Copy className="w-5 h-5" />
-                                            {codeCopied ? 'Copied!' : 'Copy Code'}
-                                        </button>
-                                        <button
-                                            onClick={() => setShowCodeModal(false)}
-                                            className="w-full bg-gray-200 text-gray-700 py-3 rounded-lg hover:bg-gray-300 transition font-semibold"
-                                        >
-                                            Close
-                                        </button>
+                        <div className="mb-8">
+                            <div className="flex justify-between mb-4">
+                                <h2 className="text-xl font-bold">Kids</h2>
+                                <button onClick={() => setShowKid(true)} className="px-4 py-2 bg-blue-500 text-white rounded-lg">+ Add Kid</button>
+                            </div>
+                            <div className="flex gap-3 flex-wrap">
+                                {kids.map(k => (
+                                    <div key={k.id} className="flex items-center gap-2 px-4 py-2 rounded-full" style={{ backgroundColor: k.color + '30' }}>
+                                        <span style={{ color: k.color }}>{k.name}</span>
+                                        <button onClick={() => delKid(k.id)} className="text-red-500">×</button>
                                     </div>
-                                </div>
-                            )}
-
-                            {/* Kids Section */}
-                            <div className="mb-8">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h2 className="text-xl font-semibold text-gray-700">Kids</h2>
-                                    <button
-                                        onClick={() => setShowAddKid(true)}
-                                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center gap-2"
-                                    >
-                                        <Plus className="w-4 h-4" />
-                                        Add Kid
-                                    </button>
-                                </div>
-
-                                {kids.length === 0 ? (
-                                    <p className="text-gray-500 text-center py-4">No kids added yet. Add your first kid to get started!</p>
-                                ) : (
-                                    <div className="flex flex-wrap gap-3">
-                                        {kids.map(kid => (
-                                            <div
-                                                key={kid.id}
-                                                className="flex items-center gap-2 px-4 py-2 rounded-full shadow-md"
-                                                style={{ backgroundColor: kid.color + '20', borderLeft: `4px solid ${kid.color}` }}
-                                            >
-                                                <span className="font-medium" style={{ color: kid.color }}>{kid.name}</span>
-                                                <button
-                                                    onClick={() => removeKid(kid.id)}
-                                                    className="text-gray-500 hover:text-red-500"
-                                                >
-                                                    <X className="w-4 h-4" />
-                                                </button>
-                                            </div>
+                                ))}
+                            </div>
+                            {showKid && (
+                                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                                    <input value={newKid.name} onChange={e => setNewKid({ ...newKid, name: e.target.value })} placeholder="Name" className="w-full px-4 py-2 border rounded mb-3" />
+                                    <div className="flex gap-2 mb-3">
+                                        {colors.map(c => (
+                                            <button key={c} onClick={() => setNewKid({ ...newKid, color: c })} className="w-8 h-8 rounded-full" style={{ backgroundColor: c, border: newKid.color === c ? '2px solid black' : 'none' }} />
                                         ))}
                                     </div>
-                                )}
+                                    <button onClick={addKid} className="px-4 py-2 bg-blue-500 text-white rounded mr-2">Add</button>
+                                    <button onClick={() => setShowKid(false)} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                                </div>
+                            )}
+                        </div>
 
-                                {showAddKid && (
-                                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                                        <input
-                                            type="text"
-                                            placeholder="Kid's name"
-                                            value={newKid.name}
-                                            onChange={(e) => setNewKid({ ...newKid, name: e.target.value })}
-                                            className="w-full px-4 py-2 border rounded-lg mb-3"
-                                        />
-                                        <div className="flex gap-2 mb-3">
-                                            {colorOptions.map(color => (
-                                                <button
-                                                    key={color}
-                                                    onClick={() => setNewKid({ ...newKid, color })}
-                                                    className="w-8 h-8 rounded-full border-2"
-                                                    style={{
-                                                        backgroundColor: color,
-                                                        borderColor: newKid.color === color ? '#000' : '#fff'
-                                                    }}
-                                                />
-                                            ))}
+                        <div>
+                            <div className="flex justify-between mb-4">
+                                <h2 className="text-xl font-bold">Activities</h2>
+                                <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add Activity</button>
+                            </div>
+                            {showAct && (
+                                <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                                    <select value={newAct.kidId} onChange={e => setNewAct({ ...newAct, kidId: e.target.value })} className="w-full px-4 py-2 border rounded mb-2">
+                                        <option value="">Select Kid</option>
+                                        {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+                                    </select>
+                                    <input value={newAct.title} onChange={e => setNewAct({ ...newAct, title: e.target.value })} placeholder="Activity" className="w-full px-4 py-2 border rounded mb-2" />
+                                    <input type="date" value={newAct.date} onChange={e => setNewAct({ ...newAct, date: e.target.value })} className="w-full px-4 py-2 border rounded mb-2" />
+                                    <input type="time" value={newAct.time} onChange={e => setNewAct({ ...newAct, time: e.target.value })} className="w-full px-4 py-2 border rounded mb-2" />
+                                    <input value={newAct.location} onChange={e => setNewAct({ ...newAct, location: e.target.value })} placeholder="Location" className="w-full px-4 py-2 border rounded mb-2" />
+                                    <select value={newAct.parent} onChange={e => setNewAct({ ...newAct, parent: e.target.value })} className="w-full px-4 py-2 border rounded mb-2">
+                                        <option>Mom</option>
+                                        <option>Dad</option>
+                                        <option>Both</option>
+                                    </select>
+                                    <button onClick={addAct} className="px-4 py-2 bg-green-500 text-white rounded mr-2">Add</button>
+                                    <button onClick={() => setShowAct(false)} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                                </div>
+                            )}
+                            <div className="space-y-3">
+                                {upcoming.length === 0 ? <p className="text-gray-500 text-center py-8">No activities</p> : upcoming.map(a => {
+                                    const kid = kids.find(k => k.id === a.kidId);
+                                    return (
+                                        <div key={a.id} className="p-4 border-l-4 rounded shadow" style={{ borderLeftColor: kid?.color }}>
+                                            <div className="flex justify-between">
+                                                <div>
+                                                    <h3 className="font-bold">{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span></h3>
+                                                    <p className="text-sm text-gray-600">{a.date} {a.time} | {a.parent} | {a.location}</p>
+                                                    {a.notes && <p className="text-sm text-gray-500 mt-1">{a.notes}</p>}
+                                                </div>
+                                                <button onClick={() => delAct(a.id)} className="text-red-500">×</button>
+                                            </div>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={addKid}
-                                                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-                                            >
-                                                Add
-                                            </button>
-                                            <button
-                                                onClick={() => setShowAddKid(false)}
-                                                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
