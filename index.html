@@ -365,22 +365,32 @@
             };
 
             const handleDeleteCommand = async (text) => {
+                console.log('Delete command:', text);
+                console.log('Available activities:', acts.length);
+
                 // Find kid name
                 let kidId = null;
+                let kidName = '';
                 for (const kid of kids) {
                     if (text.includes(kid.name.toLowerCase())) {
                         kidId = kid.id;
+                        kidName = kid.name;
                         break;
                     }
                 }
 
+                console.log('Found kid:', kidName || 'none');
+
                 // Find activity title keywords
                 const titleKeywords = text
-                    .replace(/\b(delete|remove|cancel)\b/gi, '')
+                    .replace(/\b(delete|remove|cancel|'s)\b/gi, '')
                     .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
                     .replace(/\bon\b/gi, '')
+                    .replace(/\bthe\b/gi, '')
                     .split(/\s+/)
                     .filter(w => w.length > 2 && !kids.some(k => k.name.toLowerCase() === w.toLowerCase()));
+
+                console.log('Title keywords:', titleKeywords);
 
                 // Find date
                 const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -407,21 +417,36 @@
                     targetDate = tomorrow.toISOString().split('T')[0];
                 }
 
-                // Find matching activities
+                console.log('Target date:', targetDate || 'none');
+
+                // Find matching activities - be more flexible
                 let matches = acts.filter(a => {
-                    let match = true;
-                    if (kidId) match = match && a.kidId === kidId;
-                    if (targetDate) match = match && a.date === targetDate;
+                    // Must match kid if specified
+                    if (kidId && a.kidId !== kidId) return false;
+                    
+                    // Must match date if specified
+                    if (targetDate && a.date !== targetDate) return false;
+                    
+                    // If we have keywords, at least one must match
                     if (titleKeywords.length > 0) {
-                        match = match && titleKeywords.some(kw => 
+                        const hasMatch = titleKeywords.some(kw => 
                             a.title.toLowerCase().includes(kw.toLowerCase())
                         );
+                        if (!hasMatch) return false;
                     }
-                    return match;
+                    
+                    return true;
                 });
 
+                console.log('Matches found:', matches.length);
+
                 if (matches.length === 0) {
-                    alert('No matching activities found. Try being more specific.');
+                    // Show debug info
+                    const debugInfo = `No matching activities found.\n\nSearching for:\n- Kid: ${kidName || 'any'}\n- Keywords: ${titleKeywords.join(', ') || 'none'}\n- Date: ${targetDate || 'any'}\n\nYour activities:\n${acts.map(a => {
+                        const k = kids.find(kid => kid.id === a.kidId);
+                        return `${a.title} - ${k?.name} on ${a.date}`;
+                    }).join('\n')}`;
+                    alert(debugInfo);
                     setShowNL(false);
                     setNlText('');
                     return;
@@ -432,15 +457,19 @@
                     const kid = kids.find(k => k.id === activity.kidId);
                     const confirmMsg = `Delete this activity?\n\n${activity.title} - ${kid?.name}\n${activity.date} ${activity.time}`;
                     if (confirm(confirmMsg)) {
-                        await db.collection('activities').doc(activity.id).delete();
-                        alert('Activity deleted!');
+                        try {
+                            await db.collection('activities').doc(activity.id).delete();
+                            alert('Activity deleted successfully!');
+                        } catch (error) {
+                            alert('Error deleting: ' + error.message);
+                        }
                     }
                 } else {
                     const list = matches.map((a, i) => {
                         const kid = kids.find(k => k.id === a.kidId);
                         return `${i + 1}. ${a.title} - ${kid?.name} on ${a.date} at ${a.time}`;
                     }).join('\n');
-                    alert(`Found ${matches.length} matching activities:\n\n${list}\n\nPlease be more specific.`);
+                    alert(`Found ${matches.length} matching activities:\n\n${list}\n\nPlease be more specific (add kid name or date).`);
                 }
 
                 setShowNL(false);
