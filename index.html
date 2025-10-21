@@ -477,43 +477,93 @@
             };
 
             const handleEditCommand = async (text) => {
+                console.log('Edit command:', text);
+
                 // Find kid name
                 let kidId = null;
+                let kidName = '';
                 for (const kid of kids) {
                     if (text.includes(kid.name.toLowerCase())) {
                         kidId = kid.id;
+                        kidName = kid.name;
                         break;
                     }
                 }
 
-                // Find activity title keywords (before "to" if present)
-                const beforeTo = text.split(/\bto\b/i)[0];
-                const titleKeywords = beforeTo
+                console.log('Found kid:', kidName || 'none');
+
+                // Find OLD date (mentioned first, usually with "on")
+                let oldDate = null;
+                const onDateMatch = text.match(/\bon\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})/i);
+                if (onDateMatch) {
+                    const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+                    const monthIndex = months.indexOf(onDateMatch[1].toLowerCase());
+                    const day = parseInt(onDateMatch[2]);
+                    const year = new Date().getFullYear();
+                    oldDate = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                }
+
+                console.log('Old date:', oldDate || 'none');
+
+                // Find activity title keywords (before "from" or "to")
+                const beforeFromTo = text.split(/\b(from|to)\b/i)[0];
+                const titleKeywords = beforeFromTo
                     .replace(/\b(change|edit|update|move|reschedule)\b/gi, '')
+                    .replace(/\bon\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}/gi, '')
                     .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
                     .split(/\s+/)
                     .filter(w => w.length > 2 && !kids.some(k => k.name.toLowerCase() === w.toLowerCase()));
 
-                // Find what to change (after "to")
-                const afterTo = text.split(/\bto\b/i)[1] || '';
+                console.log('Title keywords:', titleKeywords);
 
-                // Find new time
+                // Find what to change (after "from" and "to")
+                const parts = text.split(/\b(from|to)\b/i);
+                let fromPart = '';
+                let toPart = '';
+                
+                if (parts.length >= 3) {
+                    const fromIndex = parts.findIndex(p => p.toLowerCase() === 'from');
+                    const toIndex = parts.findIndex(p => p.toLowerCase() === 'to');
+                    
+                    if (fromIndex > 0 && toIndex > fromIndex) {
+                        fromPart = parts.slice(fromIndex + 1, toIndex).join('').trim();
+                        toPart = parts.slice(toIndex + 1).join('').trim();
+                    } else if (toIndex > 0) {
+                        toPart = parts.slice(toIndex + 1).join('').trim();
+                    }
+                }
+
+                console.log('From part:', fromPart);
+                console.log('To part:', toPart);
+
+                // Parse old time from "from" part
+                let oldTime = null;
+                const fromTimeMatch = fromPart.match(/(\d{1,2}):?(\d{2})/);
+                if (fromTimeMatch) {
+                    oldTime = `${String(fromTimeMatch[1]).padStart(2, '0')}:${fromTimeMatch[2]}`;
+                }
+
+                console.log('Old time:', oldTime || 'none');
+
+                // Parse new time from "to" part
                 let newTime = null;
-                const timeMatch = afterTo.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
-                if (timeMatch) {
-                    let hours = parseInt(timeMatch[1]);
-                    const minutes = timeMatch[2] || '00';
-                    const ampm = timeMatch[3]?.toLowerCase();
+                const toTimeMatch = toPart.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
+                if (toTimeMatch) {
+                    let hours = parseInt(toTimeMatch[1]);
+                    const minutes = toTimeMatch[2] || '00';
+                    const ampm = toTimeMatch[3]?.toLowerCase();
                     if (ampm === 'pm' && hours < 12) hours += 12;
                     if (ampm === 'am' && hours === 12) hours = 0;
                     newTime = `${String(hours).padStart(2, '0')}:${minutes}`;
                 }
 
-                // Find new date
+                console.log('New time:', newTime || 'none');
+
+                // Find new date from "to" part
                 const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
                 let newDate = null;
                 for (let i = 0; i < days.length; i++) {
-                    if (afterTo.includes(days[i])) {
+                    if (toPart.includes(days[i])) {
                         const today = new Date();
                         const targetDay = i;
                         const currentDay = today.getDay();
@@ -526,20 +576,35 @@
                     }
                 }
 
-                // Find matching activities
+                console.log('New date:', newDate || 'none');
+
+                // Find matching activities - use old date and old time if specified
                 let matches = acts.filter(a => {
-                    let match = true;
-                    if (kidId) match = match && a.kidId === kidId;
+                    // Must match kid if specified
+                    if (kidId && a.kidId !== kidId) return false;
+                    
+                    // Must match old date if specified
+                    if (oldDate && a.date !== oldDate) return false;
+                    
+                    // Must match old time if specified
+                    if (oldTime && a.time !== oldTime) return false;
+                    
+                    // If we have title keywords, at least one must match
                     if (titleKeywords.length > 0) {
-                        match = match && titleKeywords.some(kw => 
+                        const hasMatch = titleKeywords.some(kw => 
                             a.title.toLowerCase().includes(kw.toLowerCase())
                         );
+                        if (!hasMatch) return false;
                     }
-                    return match;
+                    
+                    return true;
                 });
 
+                console.log('Matches found:', matches.length);
+
                 if (matches.length === 0) {
-                    alert('No matching activities found. Try being more specific.');
+                    const debugInfo = `No matching activities found.\n\nSearching for:\n- Kid: ${kidName || 'any'}\n- Date: ${oldDate || 'any'}\n- Time: ${oldTime || 'any'}\n- Keywords: ${titleKeywords.join(', ') || 'none'}\n\nTry including the date like: "update Emma Playdate on October 22 from 14:00 to 15:00"`;
+                    alert(debugInfo);
                     setShowNL(false);
                     setNlText('');
                     return;
@@ -552,7 +617,7 @@
                     if (newDate) updates.date = newDate;
 
                     if (Object.keys(updates).length === 0) {
-                        alert('Could not understand what to change. Try: "change Emma soccer to 4pm" or "move Liam piano to Friday"');
+                        alert('Could not understand what to change.\n\nTry:\n- "change Emma soccer to 4pm"\n- "move Liam piano to Friday"\n- "update Emma practice from 3pm to 4pm"');
                         setShowNL(false);
                         setNlText('');
                         return;
@@ -563,15 +628,19 @@
                     const confirmMsg = `Update this activity?\n\n${activity.title} - ${kid?.name}\nOld: ${activity.date} ${activity.time}\n\nChanges: ${changes}`;
                     
                     if (confirm(confirmMsg)) {
-                        await db.collection('activities').doc(activity.id).update(updates);
-                        alert('Activity updated!');
+                        try {
+                            await db.collection('activities').doc(activity.id).update(updates);
+                            alert('Activity updated successfully!');
+                        } catch (error) {
+                            alert('Error updating: ' + error.message);
+                        }
                     }
                 } else {
                     const list = matches.map((a, i) => {
                         const kid = kids.find(k => k.id === a.kidId);
                         return `${i + 1}. ${a.title} - ${kid?.name} on ${a.date} at ${a.time}`;
                     }).join('\n');
-                    alert(`Found ${matches.length} matching activities:\n\n${list}\n\nPlease be more specific (include kid name or date).`);
+                    alert(`Found ${matches.length} matching activities:\n\n${list}\n\nTo update a specific one, include BOTH the date and old time:\n"update ${kidName || '[Kid]'} ${titleKeywords[0] || '[Activity]'} on October 22 from 14:00 to 15:00"`);
                 }
 
                 setShowNL(false);
