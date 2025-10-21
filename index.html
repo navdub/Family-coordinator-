@@ -82,8 +82,13 @@
             const [showKid, setShowKid] = useState(false);
             const [showAct, setShowAct] = useState(false);
             const [showNL, setShowNL] = useState(false);
+            const [showRecommend, setShowRecommend] = useState(false);
             const [nlText, setNlText] = useState('');
             const [nlLoading, setNlLoading] = useState(false);
+            const [recLocation, setRecLocation] = useState('');
+            const [recPreferences, setRecPreferences] = useState('');
+            const [recommendations, setRecommendations] = useState([]);
+            const [recLoading, setRecLoading] = useState(false);
             const [showCode, setShowCode] = useState(false);
             const [showPast, setShowPast] = useState(false);
             const [view, setView] = useState('list');
@@ -476,6 +481,59 @@
                 setNlText('');
             };
 
+            const getRecommendations = async () => {
+                if (!recLocation.trim()) {
+                    alert('Please enter a location');
+                    return;
+                }
+
+                setRecLoading(true);
+                setRecommendations([]);
+
+                try {
+                    const response = await fetch('/api/recommend-activities', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            location: recLocation,
+                            kids: kids,
+                            preferences: recPreferences
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Failed to get recommendations');
+                    }
+
+                    const data = await response.json();
+                    setRecommendations(data.recommendations || []);
+                } catch (error) {
+                    alert('Error getting recommendations: ' + error.message);
+                }
+
+                setRecLoading(false);
+            };
+
+            const addRecommendedActivity = (rec, kidId) => {
+                const today = new Date();
+                setNewAct({
+                    kidId: kidId,
+                    title: rec.title,
+                    date: today.toISOString().split('T')[0],
+                    time: '',
+                    location: rec.venue || '',
+                    parent: 'Mom',
+                    notes: rec.notes || '',
+                    duration: rec.duration || 60,
+                    type: rec.type || 'Other',
+                    notify: false,
+                    recurring: 'none'
+                });
+                setShowRecommend(false);
+                setShowAct(true);
+            };
+
             const handleEditCommand = async (text) => {
                 console.log('Edit command:', text);
 
@@ -817,9 +875,88 @@
                                     )}
                                     <button onClick={() => setView('list')} className={`px-3 py-2 rounded ${view === 'list' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>List</button>
                                     <button onClick={() => setView('calendar')} className={`px-3 py-2 rounded ${view === 'calendar' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Calendar</button>
+                                    <button onClick={() => setShowRecommend(true)} className="px-4 py-2 bg-purple-500 text-white rounded-lg">🤖 AI Suggest</button>
                                     <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add Detailed</button>
                                 </div>
                             </div>
+
+                            {showRecommend && (
+                                <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border-2 border-purple-200">
+                                    <h3 className="font-bold text-xl mb-3 text-purple-800">🤖 AI Activity Recommendations</h3>
+                                    <p className="text-sm text-gray-600 mb-4">Get personalized activity suggestions based on your location and kids!</p>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold mb-1">Location *</label>
+                                            <input
+                                                type="text"
+                                                value={recLocation}
+                                                onChange={e => setRecLocation(e.target.value)}
+                                                placeholder="e.g., Seattle, WA or zip code"
+                                                className="w-full px-4 py-2 border rounded-lg"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold mb-1">Preferences (optional)</label>
+                                            <input
+                                                type="text"
+                                                value={recPreferences}
+                                                onChange={e => setRecPreferences(e.target.value)}
+                                                placeholder="e.g., outdoor, indoor, educational"
+                                                className="w-full px-4 py-2 border rounded-lg"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-2 mb-4">
+                                        <button
+                                            onClick={getRecommendations}
+                                            disabled={recLoading}
+                                            className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-semibold"
+                                        >
+                                            {recLoading ? '🔄 Getting Suggestions...' : '🤖 Get AI Recommendations'}
+                                        </button>
+                                        <button
+                                            onClick={() => { setShowRecommend(false); setRecommendations([]); }}
+                                            className="px-4 py-2 bg-gray-200 rounded-lg"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+
+                                    {recommendations.length > 0 && (
+                                        <div className="bg-white rounded-lg p-4 max-h-96 overflow-y-auto">
+                                            <h4 className="font-bold mb-3 text-lg">Suggested Activities:</h4>
+                                            <div className="space-y-3">
+                                                {recommendations.map((rec, idx) => (
+                                                    <div key={idx} className="border rounded-lg p-4 hover:bg-gray-50">
+                                                        <h5 className="font-bold text-purple-700 mb-1">{rec.title}</h5>
+                                                        <p className="text-sm text-gray-600 mb-2">{rec.venue}</p>
+                                                        {rec.notes && <p className="text-sm text-gray-500 mb-2">{rec.notes}</p>}
+                                                        <div className="flex gap-2 text-xs text-gray-500 mb-3">
+                                                            {rec.duration && <span>⏱️ {rec.duration} min</span>}
+                                                            {rec.bestTime && <span>🕐 {rec.bestTime}</span>}
+                                                            {rec.ageAppropriate && <span>👶 {rec.ageAppropriate}</span>}
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {kids.map(kid => (
+                                                                <button
+                                                                    key={kid.id}
+                                                                    onClick={() => addRecommendedActivity(rec, kid.id)}
+                                                                    className="px-3 py-1 text-xs rounded-full text-white"
+                                                                    style={{ backgroundColor: kid.color }}
+                                                                >
+                                                                    Add for {kid.name}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {showAct && (
                                 <div className="mb-4 p-4 bg-gray-50 rounded-lg">
