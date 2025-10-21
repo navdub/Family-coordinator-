@@ -208,6 +208,22 @@
 
                 try {
                     const text = nlText.toLowerCase().trim();
+                    
+                    // Check for delete command
+                    if (text.match(/\b(delete|remove|cancel)\b/i)) {
+                        await handleDeleteCommand(text);
+                        setNlLoading(false);
+                        return;
+                    }
+                    
+                    // Check for edit/change command
+                    if (text.match(/\b(change|edit|update|move|reschedule)\b/i)) {
+                        await handleEditCommand(text);
+                        setNlLoading(false);
+                        return;
+                    }
+
+                    // Otherwise, create new activity
                     const parsed = {};
 
                     // Find kid name
@@ -295,7 +311,6 @@
                     }
 
                     // Find activity title
-                    // Remove known patterns to extract title
                     let titleText = text
                         .replace(/(pick\s*up|drop\s*off)/gi, '')
                         .replace(/\b(mom|dad|both)\b/gi, '')
@@ -304,7 +319,6 @@
                         .replace(/\bat\s+[^,\.]+/gi, '')
                         .replace(/(has|have|needs?|going\s+to)/gi, '');
 
-                    // Clean up and extract meaningful words
                     const titleWords = titleText.split(/\s+/).filter(w => 
                         w.length > 2 && 
                         !kids.some(k => k.name.toLowerCase() === w.toLowerCase())
@@ -315,7 +329,6 @@
                             .replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '');
                     }
 
-                    // Capitalize first letter
                     if (parsed.title) {
                         parsed.title = parsed.title.charAt(0).toUpperCase() + parsed.title.slice(1);
                     }
@@ -324,7 +337,6 @@
                         parsed.location = parsed.location.charAt(0).toUpperCase() + parsed.location.slice(1);
                     }
 
-                    // Set defaults
                     if (!parsed.title) parsed.title = 'Activity';
                     if (!parsed.date) parsed.date = today.toISOString().split('T')[0];
                     if (!parsed.location) parsed.location = '';
@@ -350,6 +362,191 @@
                     alert('Error parsing: ' + error.message);
                 }
                 setNlLoading(false);
+            };
+
+            const handleDeleteCommand = async (text) => {
+                // Find kid name
+                let kidId = null;
+                for (const kid of kids) {
+                    if (text.includes(kid.name.toLowerCase())) {
+                        kidId = kid.id;
+                        break;
+                    }
+                }
+
+                // Find activity title keywords
+                const titleKeywords = text
+                    .replace(/\b(delete|remove|cancel)\b/gi, '')
+                    .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
+                    .replace(/\bon\b/gi, '')
+                    .split(/\s+/)
+                    .filter(w => w.length > 2 && !kids.some(k => k.name.toLowerCase() === w.toLowerCase()));
+
+                // Find date
+                const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                let targetDate = null;
+                for (let i = 0; i < days.length; i++) {
+                    if (text.includes(days[i])) {
+                        const today = new Date();
+                        const targetDay = i;
+                        const currentDay = today.getDay();
+                        let daysToAdd = targetDay - currentDay;
+                        if (daysToAdd <= 0) daysToAdd += 7;
+                        const date = new Date(today);
+                        date.setDate(today.getDate() + daysToAdd);
+                        targetDate = date.toISOString().split('T')[0];
+                        break;
+                    }
+                }
+
+                if (text.match(/\btoday\b/i)) {
+                    targetDate = new Date().toISOString().split('T')[0];
+                } else if (text.match(/\btomorrow\b/i)) {
+                    const tomorrow = new Date();
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    targetDate = tomorrow.toISOString().split('T')[0];
+                }
+
+                // Find matching activities
+                let matches = acts.filter(a => {
+                    let match = true;
+                    if (kidId) match = match && a.kidId === kidId;
+                    if (targetDate) match = match && a.date === targetDate;
+                    if (titleKeywords.length > 0) {
+                        match = match && titleKeywords.some(kw => 
+                            a.title.toLowerCase().includes(kw.toLowerCase())
+                        );
+                    }
+                    return match;
+                });
+
+                if (matches.length === 0) {
+                    alert('No matching activities found. Try being more specific.');
+                    setShowNL(false);
+                    setNlText('');
+                    return;
+                }
+
+                if (matches.length === 1) {
+                    const activity = matches[0];
+                    const kid = kids.find(k => k.id === activity.kidId);
+                    const confirmMsg = `Delete this activity?\n\n${activity.title} - ${kid?.name}\n${activity.date} ${activity.time}`;
+                    if (confirm(confirmMsg)) {
+                        await db.collection('activities').doc(activity.id).delete();
+                        alert('Activity deleted!');
+                    }
+                } else {
+                    const list = matches.map((a, i) => {
+                        const kid = kids.find(k => k.id === a.kidId);
+                        return `${i + 1}. ${a.title} - ${kid?.name} on ${a.date} at ${a.time}`;
+                    }).join('\n');
+                    alert(`Found ${matches.length} matching activities:\n\n${list}\n\nPlease be more specific.`);
+                }
+
+                setShowNL(false);
+                setNlText('');
+            };
+
+            const handleEditCommand = async (text) => {
+                // Find kid name
+                let kidId = null;
+                for (const kid of kids) {
+                    if (text.includes(kid.name.toLowerCase())) {
+                        kidId = kid.id;
+                        break;
+                    }
+                }
+
+                // Find activity title keywords (before "to" if present)
+                const beforeTo = text.split(/\bto\b/i)[0];
+                const titleKeywords = beforeTo
+                    .replace(/\b(change|edit|update|move|reschedule)\b/gi, '')
+                    .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
+                    .split(/\s+/)
+                    .filter(w => w.length > 2 && !kids.some(k => k.name.toLowerCase() === w.toLowerCase()));
+
+                // Find what to change (after "to")
+                const afterTo = text.split(/\bto\b/i)[1] || '';
+
+                // Find new time
+                let newTime = null;
+                const timeMatch = afterTo.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
+                if (timeMatch) {
+                    let hours = parseInt(timeMatch[1]);
+                    const minutes = timeMatch[2] || '00';
+                    const ampm = timeMatch[3]?.toLowerCase();
+                    if (ampm === 'pm' && hours < 12) hours += 12;
+                    if (ampm === 'am' && hours === 12) hours = 0;
+                    newTime = `${String(hours).padStart(2, '0')}:${minutes}`;
+                }
+
+                // Find new date
+                const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                let newDate = null;
+                for (let i = 0; i < days.length; i++) {
+                    if (afterTo.includes(days[i])) {
+                        const today = new Date();
+                        const targetDay = i;
+                        const currentDay = today.getDay();
+                        let daysToAdd = targetDay - currentDay;
+                        if (daysToAdd <= 0) daysToAdd += 7;
+                        const date = new Date(today);
+                        date.setDate(today.getDate() + daysToAdd);
+                        newDate = date.toISOString().split('T')[0];
+                        break;
+                    }
+                }
+
+                // Find matching activities
+                let matches = acts.filter(a => {
+                    let match = true;
+                    if (kidId) match = match && a.kidId === kidId;
+                    if (titleKeywords.length > 0) {
+                        match = match && titleKeywords.some(kw => 
+                            a.title.toLowerCase().includes(kw.toLowerCase())
+                        );
+                    }
+                    return match;
+                });
+
+                if (matches.length === 0) {
+                    alert('No matching activities found. Try being more specific.');
+                    setShowNL(false);
+                    setNlText('');
+                    return;
+                }
+
+                if (matches.length === 1) {
+                    const activity = matches[0];
+                    const updates = {};
+                    if (newTime) updates.time = newTime;
+                    if (newDate) updates.date = newDate;
+
+                    if (Object.keys(updates).length === 0) {
+                        alert('Could not understand what to change. Try: "change Emma soccer to 4pm" or "move Liam piano to Friday"');
+                        setShowNL(false);
+                        setNlText('');
+                        return;
+                    }
+
+                    const kid = kids.find(k => k.id === activity.kidId);
+                    const changes = Object.entries(updates).map(([k, v]) => `${k}: ${v}`).join(', ');
+                    const confirmMsg = `Update this activity?\n\n${activity.title} - ${kid?.name}\nOld: ${activity.date} ${activity.time}\n\nChanges: ${changes}`;
+                    
+                    if (confirm(confirmMsg)) {
+                        await db.collection('activities').doc(activity.id).update(updates);
+                        alert('Activity updated!');
+                    }
+                } else {
+                    const list = matches.map((a, i) => {
+                        const kid = kids.find(k => k.id === a.kidId);
+                        return `${i + 1}. ${a.title} - ${kid?.name} on ${a.date} at ${a.time}`;
+                    }).join('\n');
+                    alert(`Found ${matches.length} matching activities:\n\n${list}\n\nPlease be more specific (include kid name or date).`);
+                }
+
+                setShowNL(false);
+                setNlText('');
             };
 
             const delAct = async (id) => {
@@ -408,8 +605,8 @@
                         <div className="mb-6 p-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl shadow-lg">
                             <div className="flex justify-between items-center mb-3">
                                 <div>
-                                    <h2 className="text-2xl font-bold text-white mb-1">✨ Quick Add Activity</h2>
-                                    <p className="text-blue-100 text-sm">Type naturally: "Emma soccer Tuesday at 4pm at the park"</p>
+                                    <h2 className="text-2xl font-bold text-white mb-1">✨ Quick Actions</h2>
+                                    <p className="text-blue-100 text-sm">Add, edit, or delete activities with natural language</p>
                                 </div>
                                 {!showNL && (
                                     <button 
@@ -423,19 +620,29 @@
                             
                             {showNL && (
                                 <div className="bg-white rounded-lg p-4">
-                                    <p className="text-sm text-gray-600 mb-2"><strong>Examples:</strong></p>
-                                    <ul className="text-xs text-gray-600 mb-3 list-disc ml-5 grid grid-cols-1 md:grid-cols-2 gap-1">
-                                        <li>"Emma soccer practice Tuesday at 4pm"</li>
-                                        <li>"Pick up Liam tomorrow 3:30pm"</li>
-                                        <li>"Drop off Sarah Friday 8am at school"</li>
-                                        <li>"Emma piano today at 2pm with Mom"</li>
-                                    </ul>
+                                    <p className="text-sm text-gray-600 mb-2"><strong>What you can do:</strong></p>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+                                        <div className="bg-green-50 p-2 rounded">
+                                            <p className="font-semibold text-xs text-green-800 mb-1">➕ ADD</p>
+                                            <p className="text-xs text-gray-600">"Emma soccer Tuesday 4pm"</p>
+                                        </div>
+                                        <div className="bg-blue-50 p-2 rounded">
+                                            <p className="font-semibold text-xs text-blue-800 mb-1">✏️ EDIT</p>
+                                            <p className="text-xs text-gray-600">"change Emma soccer to 5pm"</p>
+                                            <p className="text-xs text-gray-600">"move Liam piano to Friday"</p>
+                                        </div>
+                                        <div className="bg-red-50 p-2 rounded">
+                                            <p className="font-semibold text-xs text-red-800 mb-1">🗑️ DELETE</p>
+                                            <p className="text-xs text-gray-600">"delete Emma soccer Tuesday"</p>
+                                            <p className="text-xs text-gray-600">"cancel Liam's piano"</p>
+                                        </div>
+                                    </div>
                                     <textarea 
                                         value={nlText} 
                                         onChange={e => setNlText(e.target.value)}
-                                        placeholder="Type your activity in plain English..."
+                                        placeholder="Type what you want to do..."
                                         className="w-full px-4 py-3 border-2 border-blue-200 rounded-lg mb-3 focus:border-blue-500 focus:outline-none"
-                                        rows="3"
+                                        rows="2"
                                         autoFocus
                                     />
                                     <div className="flex gap-2">
@@ -444,7 +651,7 @@
                                             disabled={nlLoading} 
                                             className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold"
                                         >
-                                            {nlLoading ? '🔄 Parsing...' : '✨ Create Activity'}
+                                            {nlLoading ? '🔄 Processing...' : '✨ Execute'}
                                         </button>
                                         <button 
                                             onClick={() => { setShowNL(false); setNlText(''); }} 
