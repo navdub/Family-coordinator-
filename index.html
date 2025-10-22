@@ -83,28 +83,28 @@
         const [loading, setLoading] = useState(true);
         const [showKid, setShowKid] = useState(false);
         const [showAct, setShowAct] = useState(false);
-        const [showCode, setShowCode] = useState(false);
-        const [showPast, setShowPast] = useState(false);
         const [showNL, setShowNL] = useState(false);
-        const [showRecommend, setShowRecommend] = useState(false);
-        const [view, setView] = useState('list');
-        const [mainView, setMainView] = useState('activities');
-        const [groupBy, setGroupBy] = useState('none');
-        const [expandedGroups, setExpandedGroups] = useState({});
-        const [expandedActivities, setExpandedActivities] = useState({});
-        const [newKid, setNewKid] = useState({ name: '', color: '#4ECDC4' });
-        const [newAct, setNewAct] = useState({ 
-            kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60,
-            type: 'Pick Up', notify: false, recurring: 'none', prepTasks: [], activityCategory: 'Physical', createdBy: 'Mom'
-        });
         const [nlText, setNlText] = useState('');
         const [nlLoading, setNlLoading] = useState(false);
-        const [recLocation, setRecLocation] = useState('');
-        const [recPreferences, setRecPreferences] = useState('');
-        const [recommendations, setRecommendations] = useState([]);
-        const [recLoading, setRecLoading] = useState(false);
-        const [suggestedPrepTasks, setSuggestedPrepTasks] = useState([]);
-        const [loadingPrepTasks, setLoadingPrepTasks] = useState(false);
+        const [showCode, setShowCode] = useState(false);
+        const [showPast, setShowPast] = useState(false);
+        const [view, setView] = useState('list');
+        const [groupBy, setGroupBy] = useState('none');
+        const [expandedGroups, setExpandedGroups] = useState({});
+        const [newKid, setNewKid] = useState({ name: '', color: '#4ECDC4' });
+        const [newAct, setNewAct] = useState({ 
+            kidId: '', 
+            title: '', 
+            date: '', 
+            time: '', 
+            location: '', 
+            parent: 'Mom', 
+            notes: '', 
+            duration: 60,
+            type: 'Pick Up',
+            notify: false,
+            recurring: 'none'
+        });
         const colors = ['#FF6B9D', '#4ECDC4', '#95E1D3', '#F38181', '#AA96DA'];
 
         const handleLogin = (c, n) => {
@@ -131,6 +131,7 @@
                 setActs(s.docs.map(d => ({ id: d.id, ...d.data() })));
             });
 
+            // Check notifications
             const interval = setInterval(() => {
                 const now = new Date();
                 acts.forEach(a => {
@@ -160,30 +161,12 @@
 
         const delKid = async (id) => {
             const kid = kids.find(k => k.id === id);
-            const kidActs = acts.filter(a => a.kidId === id);
-            if (!confirm(`Delete ${kid?.name}? This will also delete ${kidActs.length} activities.`)) return;
+            const kidActivities = acts.filter(a => a.kidId === id);
+            const confirmMsg = `Are you sure you want to delete ${kid?.name}?\n\nThis will also delete ${kidActivities.length} activities associated with ${kid?.name}.`;
+            if (!confirm(confirmMsg)) return;
             await db.collection('kids').doc(id).delete();
             const snap = await db.collection('activities').where('kidId', '==', id).get();
             snap.forEach(d => d.ref.delete());
-        };
-
-        const getSuggestedPrepTasks = async (title) => {
-            if (!title || title.length < 3) return;
-            setLoadingPrepTasks(true);
-            try {
-                const response = await fetch('/api/suggest-prep-tasks', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ activityTitle: title })
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    setSuggestedPrepTasks(data.tasks || []);
-                }
-            } catch (error) {
-                console.error('Error:', error);
-            }
-            setLoadingPrepTasks(false);
         };
 
         const addAct = async () => {
@@ -197,9 +180,10 @@
                 for (let i = 0; i < count; i++) {
                     const d = new Date(startDate);
                     d.setDate(d.getDate() + (interval * i));
+                    const dateStr = d.toISOString().split('T')[0];
                     await db.collection('activities').add({
                         ...newAct,
-                        date: d.toISOString().split('T')[0],
+                        date: dateStr,
                         familyCode: code,
                         recurringId: Date.now()
                     });
@@ -213,81 +197,395 @@
             }
 
             setNewAct({ 
-                kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60,
-                type: 'Pick Up', notify: false, recurring: 'none', prepTasks: [], activityCategory: 'Physical', createdBy: 'Mom'
+                kidId: '', title: '', date: '', time: '', location: '', 
+                parent: 'Mom', notes: '', duration: 60, type: 'Pick Up',
+                notify: false, recurring: 'none'
             });
-            setSuggestedPrepTasks([]);
             setShowAct(false);
         };
 
-        const delAct = async (id) => {
-            const a = acts.find(act => act.id === id);
-            const kid = kids.find(k => k.id === a?.kidId);
-            if (!confirm(`Delete ${a?.title} - ${kid?.name} on ${a?.date}?`)) return;
-            await db.collection('activities').doc(id).delete();
-        };
+        const parseNaturalLanguage = async () => {
+            if (!nlText.trim()) return;
+            setNlLoading(true);
 
-        const toggleActivityExpanded = (id) => {
-            setExpandedActivities(prev => ({ ...prev, [id]: !prev[id] }));
-        };
-
-        const getBalanceByCategory = () => {
-            const cats = {};
-            acts.forEach(a => {
-                const cat = a.activityCategory || 'Other';
-                if (!cats[cat]) cats[cat] = { total: 0, byKid: {} };
-                cats[cat].total++;
-                const kid = kids.find(k => k.id === a.kidId);
-                if (kid) {
-                    cats[cat].byKid[kid.name] = (cats[cat].byKid[kid.name] || 0) + 1;
-                }
-            });
-            return cats;
-        };
-
-        const getParentLoadBalance = () => {
-            const balance = { Mom: 0, Dad: 0, Both: 0 };
-            const created = { Mom: 0, Dad: 0 };
-            
-            acts.forEach(a => {
-                balance[a.parent] = (balance[a.parent] || 0) + 1;
-                if (a.createdBy) created[a.createdBy] = (created[a.createdBy] || 0) + 1;
-            });
-
-            return { balance, created };
-        };
-
-        const getRecommendations = async () => {
-            if (!recLocation.trim()) return alert('Enter location');
-            setRecLoading(true);
-            setRecommendations([]);
             try {
-                const response = await fetch('/api/recommend-activities', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ location: recLocation, kids, preferences: recPreferences })
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    setRecommendations(data.recommendations || []);
-                } else {
-                    const error = await response.json();
-                    alert('Error: ' + error.error);
+                const text = nlText.toLowerCase().trim();
+                
+                // Check for delete command
+                if (text.match(/\b(delete|remove|cancel)\b/i)) {
+                    await handleDeleteCommand(text);
+                    setNlLoading(false);
+                    return;
                 }
+                
+                // Check for edit/change command
+                if (text.match(/\b(change|edit|update|move|reschedule)\b/i)) {
+                    await handleEditCommand(text);
+                    setNlLoading(false);
+                    return;
+                }
+
+                // Otherwise, create new activity
+                const parsed = {};
+
+                // Find kid name
+                for (const kid of kids) {
+                    if (text.includes(kid.name.toLowerCase())) {
+                        parsed.kidId = kid.id;
+                        break;
+                    }
+                }
+
+                if (!parsed.kidId) {
+                    alert('Could not find kid name. Please mention one of: ' + kids.map(k => k.name).join(', '));
+                    setNlLoading(false);
+                    return;
+                }
+
+                // Find type (pick up, drop off)
+                if (text.match(/pick\s*up|pickup/i)) {
+                    parsed.type = 'Pick Up';
+                } else if (text.match(/drop\s*off|dropoff/i)) {
+                    parsed.type = 'Drop Off';
+                } else {
+                    parsed.type = 'Other';
+                }
+
+                // Find parent
+                if (text.match(/\bmom\b/i)) {
+                    parsed.parent = 'Mom';
+                } else if (text.match(/\bdad\b/i)) {
+                    parsed.parent = 'Dad';
+                } else if (text.match(/both|together/i)) {
+                    parsed.parent = 'Both';
+                } else {
+                    parsed.parent = 'Mom';
+                }
+
+                // Find date
+                const today = new Date();
+                if (text.match(/\btoday\b/i)) {
+                    parsed.date = today.toISOString().split('T')[0];
+                } else if (text.match(/\btomorrow\b/i)) {
+                    const tomorrow = new Date(today);
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    parsed.date = tomorrow.toISOString().split('T')[0];
+                } else {
+                    // Check for day of week
+                    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                    for (let i = 0; i < days.length; i++) {
+                        if (text.includes(days[i])) {
+                            const targetDay = i;
+                            const currentDay = today.getDay();
+                            let daysToAdd = targetDay - currentDay;
+                            if (daysToAdd <= 0) daysToAdd += 7;
+                            const targetDate = new Date(today);
+                            targetDate.setDate(today.getDate() + daysToAdd);
+                            parsed.date = targetDate.toISOString().split('T')[0];
+                            break;
+                        }
+                    }
+                }
+
+                // Check for YYYY-MM-DD format
+                const dateMatch = text.match(/\d{4}-\d{2}-\d{2}/);
+                if (dateMatch) {
+                    parsed.date = dateMatch[0];
+                }
+
+                // Find time
+                const timeMatch = text.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
+                if (timeMatch) {
+                    let hours = parseInt(timeMatch[1]);
+                    const minutes = timeMatch[2] || '00';
+                    const ampm = timeMatch[3]?.toLowerCase();
+
+                    if (ampm === 'pm' && hours < 12) hours += 12;
+                    if (ampm === 'am' && hours === 12) hours = 0;
+
+                    parsed.time = `${String(hours).padStart(2, '0')}:${minutes}`;
+                }
+
+                // Find location (words after "at" or "location")
+                const locationMatch = text.match(/\bat\s+([^,\.]+?)(?:\s+on|\s+at\s+\d|$)/i);
+                if (locationMatch) {
+                    parsed.location = locationMatch[1].trim();
+                }
+
+                // Find activity title
+                let titleText = text
+                    .replace(/(pick\s*up|drop\s*off)/gi, '')
+                    .replace(/\b(mom|dad|both)\b/gi, '')
+                    .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
+                    .replace(/\d{1,2}:?\d{0,2}\s*(am|pm)?/gi, '')
+                    .replace(/\bat\s+[^,\.]+/gi, '')
+                    .replace(/(has|have|needs?|going\s+to)/gi, '');
+
+                const titleWords = titleText.split(/\s+/).filter(w => 
+                    w.length > 2 && 
+                    !kids.some(k => k.name.toLowerCase() === w.toLowerCase())
+                );
+
+                if (titleWords.length > 0) {
+                    parsed.title = titleWords.slice(0, 3).join(' ').trim()
+                        .replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '');
+                }
+
+                if (parsed.title) {
+                    parsed.title = parsed.title.charAt(0).toUpperCase() + parsed.title.slice(1);
+                }
+
+                if (parsed.location) {
+                    parsed.location = parsed.location.charAt(0).toUpperCase() + parsed.location.slice(1);
+                }
+
+                if (!parsed.title) parsed.title = 'Activity';
+                if (!parsed.date) parsed.date = today.toISOString().split('T')[0];
+                if (!parsed.location) parsed.location = '';
+
+                setNewAct({
+                    kidId: parsed.kidId,
+                    title: parsed.title,
+                    date: parsed.date,
+                    time: parsed.time || '',
+                    location: parsed.location,
+                    parent: parsed.parent,
+                    notes: `Created from: "${nlText}"`,
+                    duration: 60,
+                    type: parsed.type,
+                    notify: false,
+                    recurring: 'none'
+                });
+
+                setShowNL(false);
+                setShowAct(true);
+                setNlText('');
             } catch (error) {
-                alert('Error: ' + error.message);
+                alert('Error parsing: ' + error.message);
             }
-            setRecLoading(false);
+            setNlLoading(false);
         };
 
-        const addRecommendedActivity = (rec, kidId) => {
-            setNewAct({
-                kidId, title: rec.title, date: new Date().toISOString().split('T')[0], time: '', location: rec.venue || '',
-                parent: 'Mom', notes: rec.notes || '', duration: rec.duration || 60, type: rec.type || 'Other',
-                notify: false, recurring: 'none', prepTasks: [], activityCategory: rec.category || 'Physical', createdBy: 'Mom'
+        const handleDeleteCommand = async (text) => {
+            console.log('Delete command:', text);
+            console.log('Available activities:', acts.length);
+
+            // Find kid name
+            let kidId = null;
+            let kidName = '';
+            for (const kid of kids) {
+                if (text.includes(kid.name.toLowerCase())) {
+                    kidId = kid.id;
+                    kidName = kid.name;
+                    break;
+                }
+            }
+
+            console.log('Found kid:', kidName || 'none');
+
+            // Find activity title keywords
+            const titleKeywords = text
+                .replace(/\b(delete|remove|cancel|'s)\b/gi, '')
+                .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
+                .replace(/\bon\b/gi, '')
+                .replace(/\bthe\b/gi, '')
+                .split(/\s+/)
+                .filter(w => w.length > 2 && !kids.some(k => k.name.toLowerCase() === w.toLowerCase()));
+
+            console.log('Title keywords:', titleKeywords);
+
+            // Find date
+            const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            let targetDate = null;
+            for (let i = 0; i < days.length; i++) {
+                if (text.includes(days[i])) {
+                    const today = new Date();
+                    const targetDay = i;
+                    const currentDay = today.getDay();
+                    let daysToAdd = targetDay - currentDay;
+                    if (daysToAdd <= 0) daysToAdd += 7;
+                    const date = new Date(today);
+                    date.setDate(today.getDate() + daysToAdd);
+                    targetDate = date.toISOString().split('T')[0];
+                    break;
+                }
+            }
+
+            if (text.match(/\btoday\b/i)) {
+                targetDate = new Date().toISOString().split('T')[0];
+            } else if (text.match(/\btomorrow\b/i)) {
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                targetDate = tomorrow.toISOString().split('T')[0];
+            }
+
+            console.log('Target date:', targetDate || 'none');
+
+            // Find matching activities - be more flexible
+            let matches = acts.filter(a => {
+                // Must match kid if specified
+                if (kidId && a.kidId !== kidId) return false;
+                
+                // Must match date if specified
+                if (targetDate && a.date !== targetDate) return false;
+                
+                // If we have keywords, at least one must match
+                if (titleKeywords.length > 0) {
+                    const hasMatch = titleKeywords.some(kw => 
+                        a.title.toLowerCase().includes(kw.toLowerCase())
+                    );
+                    if (!hasMatch) return false;
+                }
+                
+                return true;
             });
-            setShowRecommend(false);
-            setShowAct(true);
+
+            console.log('Matches found:', matches.length);
+
+            if (matches.length === 0) {
+                // Show debug info
+                const debugInfo = `No matching activities found.\n\nSearching for:\n- Kid: ${kidName || 'any'}\n- Keywords: ${titleKeywords.join(', ') || 'none'}\n- Date: ${targetDate || 'any'}\n\nYour activities:\n${acts.map(a => {
+                    const k = kids.find(kid => kid.id === a.kidId);
+                    return `${a.title} - ${k?.name} on ${a.date}`;
+                }).join('\n')}`;
+                alert(debugInfo);
+                setShowNL(false);
+                setNlText('');
+                return;
+            }
+
+            if (matches.length === 1) {
+                const activity = matches[0];
+                const kid = kids.find(k => k.id === activity.kidId);
+                const confirmMsg = `Delete this activity?\n\n${activity.title} - ${kid?.name}\n${activity.date} ${activity.time}`;
+                if (confirm(confirmMsg)) {
+                    try {
+                        await db.collection('activities').doc(activity.id).delete();
+                        alert('Activity deleted successfully!');
+                    } catch (error) {
+                        alert('Error deleting: ' + error.message);
+                    }
+                }
+            } else {
+                const list = matches.map((a, i) => {
+                    const kid = kids.find(k => k.id === a.kidId);
+                    return `${i + 1}. ${a.title} - ${kid?.name} on ${a.date} at ${a.time}`;
+                }).join('\n');
+                alert(`Found ${matches.length} matching activities:\n\n${list}\n\nPlease be more specific (add kid name or date).`);
+            }
+
+            setShowNL(false);
+            setNlText('');
+        };
+
+        const handleEditCommand = async (text) => {
+            // Find kid name
+            let kidId = null;
+            for (const kid of kids) {
+                if (text.includes(kid.name.toLowerCase())) {
+                    kidId = kid.id;
+                    break;
+                }
+            }
+
+            // Find activity title keywords (before "to" if present)
+            const beforeTo = text.split(/\bto\b/i)[0];
+            const titleKeywords = beforeTo
+                .replace(/\b(change|edit|update|move|reschedule)\b/gi, '')
+                .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
+                .split(/\s+/)
+                .filter(w => w.length > 2 && !kids.some(k => k.name.toLowerCase() === w.toLowerCase()));
+
+            // Find what to change (after "to")
+            const afterTo = text.split(/\bto\b/i)[1] || '';
+
+            // Find new time
+            let newTime = null;
+            const timeMatch = afterTo.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
+            if (timeMatch) {
+                let hours = parseInt(timeMatch[1]);
+                const minutes = timeMatch[2] || '00';
+                const ampm = timeMatch[3]?.toLowerCase();
+                if (ampm === 'pm' && hours < 12) hours += 12;
+                if (ampm === 'am' && hours === 12) hours = 0;
+                newTime = `${String(hours).padStart(2, '0')}:${minutes}`;
+            }
+
+            // Find new date
+            const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            let newDate = null;
+            for (let i = 0; i < days.length; i++) {
+                if (afterTo.includes(days[i])) {
+                    const today = new Date();
+                    const targetDay = i;
+                    const currentDay = today.getDay();
+                    let daysToAdd = targetDay - currentDay;
+                    if (daysToAdd <= 0) daysToAdd += 7;
+                    const date = new Date(today);
+                    date.setDate(today.getDate() + daysToAdd);
+                    newDate = date.toISOString().split('T')[0];
+                    break;
+                }
+            }
+
+            // Find matching activities
+            let matches = acts.filter(a => {
+                let match = true;
+                if (kidId) match = match && a.kidId === kidId;
+                if (titleKeywords.length > 0) {
+                    match = match && titleKeywords.some(kw => 
+                        a.title.toLowerCase().includes(kw.toLowerCase())
+                    );
+                }
+                return match;
+            });
+
+            if (matches.length === 0) {
+                alert('No matching activities found. Try being more specific.');
+                setShowNL(false);
+                setNlText('');
+                return;
+            }
+
+            if (matches.length === 1) {
+                const activity = matches[0];
+                const updates = {};
+                if (newTime) updates.time = newTime;
+                if (newDate) updates.date = newDate;
+
+                if (Object.keys(updates).length === 0) {
+                    alert('Could not understand what to change. Try: "change Emma soccer to 4pm" or "move Liam piano to Friday"');
+                    setShowNL(false);
+                    setNlText('');
+                    return;
+                }
+
+                const kid = kids.find(k => k.id === activity.kidId);
+                const changes = Object.entries(updates).map(([k, v]) => `${k}: ${v}`).join(', ');
+                const confirmMsg = `Update this activity?\n\n${activity.title} - ${kid?.name}\nOld: ${activity.date} ${activity.time}\n\nChanges: ${changes}`;
+                
+                if (confirm(confirmMsg)) {
+                    await db.collection('activities').doc(activity.id).update(updates);
+                    alert('Activity updated!');
+                }
+            } else {
+                const list = matches.map((a, i) => {
+                    const kid = kids.find(k => k.id === a.kidId);
+                    return `${i + 1}. ${a.title} - ${kid?.name} on ${a.date} at ${a.time}`;
+                }).join('\n');
+                alert(`Found ${matches.length} matching activities:\n\n${list}\n\nPlease be more specific (include kid name or date).`);
+            }
+
+            setShowNL(false);
+            setNlText('');
+        };
+
+        const delAct = async (id) => {
+            const activity = acts.find(a => a.id === id);
+            const kid = kids.find(k => k.id === activity?.kidId);
+            const confirmMsg = `Are you sure you want to delete this activity?\n\n${activity?.title} - ${kid?.name}\n${activity?.date} ${activity?.time}`;
+            if (!confirm(confirmMsg)) return;
+            await db.collection('activities').doc(id).delete();
         };
 
         if (!code) return <LoginScreen onLogin={handleLogin} />;
@@ -296,8 +594,32 @@
         const today = new Date().toISOString().split('T')[0];
         const upcoming = acts.filter(a => a.date >= today).sort((a, b) => a.date.localeCompare(b.date));
         const past = acts.filter(a => a.date < today).sort((a, b) => b.date.localeCompare(a.date));
-        const categoryBalance = getBalanceByCategory();
-        const parentLoad = getParentLoadBalance();
+
+        const toggleGroup = (groupName) => {
+            setExpandedGroups(prev => ({ ...prev, [groupName]: !prev[groupName] }));
+        };
+
+        const groupActivities = (activities) => {
+            if (groupBy === 'none') return { 'All': activities };
+            
+            const grouped = {};
+            activities.forEach(a => {
+                let key;
+                if (groupBy === 'kid') {
+                    const kid = kids.find(k => k.id === a.kidId);
+                    key = kid?.name || 'Unknown';
+                } else if (groupBy === 'type') {
+                    key = a.type || 'Other';
+                } else if (groupBy === 'parent') {
+                    key = a.parent || 'Unknown';
+                } else if (groupBy === 'title') {
+                    key = a.title;
+                }
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push(a);
+            });
+            return grouped;
+        };
 
         return (
             <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
@@ -308,6 +630,69 @@
                             <button onClick={() => setShowCode(true)} className="px-4 py-2 bg-purple-100 rounded-lg">Share</button>
                             <button onClick={logout} className="px-4 py-2 bg-gray-100 rounded-lg">Logout</button>
                         </div>
+                    </div>
+
+                    {/* Quick Add Box - Prominent on landing */}
+                    <div className="mb-6 p-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl shadow-lg">
+                        <div className="flex justify-between items-center mb-3">
+                            <div>
+                                <h2 className="text-2xl font-bold text-white mb-1">✨ Quick Actions</h2>
+                                <p className="text-blue-100 text-sm">Add, edit, or delete activities with natural language</p>
+                            </div>
+                            {!showNL && (
+                                <button 
+                                    onClick={() => setShowNL(true)} 
+                                    className="px-6 py-3 bg-white text-blue-600 rounded-lg font-bold hover:bg-blue-50 transition shadow-md"
+                                >
+                                    Start Typing
+                                </button>
+                            )}
+                        </div>
+                        
+                        {showNL && (
+                            <div className="bg-white rounded-lg p-4">
+                                <p className="text-sm text-gray-600 mb-2"><strong>What you can do:</strong></p>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+                                    <div className="bg-green-50 p-2 rounded">
+                                        <p className="font-semibold text-xs text-green-800 mb-1">➕ ADD</p>
+                                        <p className="text-xs text-gray-600">"Emma soccer Tuesday 4pm"</p>
+                                    </div>
+                                    <div className="bg-blue-50 p-2 rounded">
+                                        <p className="font-semibold text-xs text-blue-800 mb-1">✏️ EDIT</p>
+                                        <p className="text-xs text-gray-600">"change Emma soccer to 5pm"</p>
+                                        <p className="text-xs text-gray-600">"move Liam piano to Friday"</p>
+                                    </div>
+                                    <div className="bg-red-50 p-2 rounded">
+                                        <p className="font-semibold text-xs text-red-800 mb-1">🗑️ DELETE</p>
+                                        <p className="text-xs text-gray-600">"delete Emma soccer Tuesday"</p>
+                                        <p className="text-xs text-gray-600">"cancel Liam's piano"</p>
+                                    </div>
+                                </div>
+                                <textarea 
+                                    value={nlText} 
+                                    onChange={e => setNlText(e.target.value)}
+                                    placeholder="Type what you want to do..."
+                                    className="w-full px-4 py-3 border-2 border-blue-200 rounded-lg mb-3 focus:border-blue-500 focus:outline-none"
+                                    rows="2"
+                                    autoFocus
+                                />
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={parseNaturalLanguage} 
+                                        disabled={nlLoading} 
+                                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold"
+                                    >
+                                        {nlLoading ? '🔄 Processing...' : '✨ Execute'}
+                                    </button>
+                                    <button 
+                                        onClick={() => { setShowNL(false); setNlText(''); }} 
+                                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {showCode && (
@@ -323,46 +708,6 @@
                         </div>
                     )}
 
-                    <div className="mb-6 p-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl shadow-lg">
-                        <div className="flex justify-between items-center mb-3">
-                            <div>
-                                <h2 className="text-2xl font-bold text-white mb-1">✨ Quick Actions</h2>
-                                <p className="text-blue-100 text-sm">Add, edit, or delete activities with natural language</p>
-                            </div>
-                            {!showNL && (
-                                <button onClick={() => setShowNL(true)} className="px-6 py-3 bg-white text-blue-600 rounded-lg font-bold hover:bg-blue-50 transition shadow-md">
-                                    Start Typing
-                                </button>
-                            )}
-                        </div>
-                        
-                        {showNL && (
-                            <div className="bg-white rounded-lg p-4">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
-                                    <div className="bg-green-50 p-2 rounded">
-                                        <p className="font-semibold text-xs text-green-800 mb-1">➕ ADD</p>
-                                        <p className="text-xs text-gray-600">"Emma soccer Tuesday 4pm"</p>
-                                    </div>
-                                    <div className="bg-blue-50 p-2 rounded">
-                                        <p className="font-semibold text-xs text-blue-800 mb-1">✏️ EDIT</p>
-                                        <p className="text-xs text-gray-600">"change Emma soccer to 5pm"</p>
-                                    </div>
-                                    <div className="bg-red-50 p-2 rounded">
-                                        <p className="font-semibold text-xs text-red-800 mb-1">🗑️ DELETE</p>
-                                        <p className="text-xs text-gray-600">"delete Emma soccer Tuesday"</p>
-                                    </div>
-                                </div>
-                                <textarea value={nlText} onChange={e => setNlText(e.target.value)} placeholder="Type what you want to do..." className="w-full px-4 py-3 border-2 border-blue-200 rounded-lg mb-3" rows="2" autoFocus />
-                                <div className="flex gap-2">
-                                    <button onClick={() => alert('NL parsing - see previous version')} disabled={nlLoading} className="px-6 py-2 bg-blue-600 text-white rounded-lg">
-                                        {nlLoading ? '🔄 Processing...' : '✨ Execute'}
-                                    </button>
-                                    <button onClick={() => { setShowNL(false); setNlText(''); }} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
                     <div className="mb-8">
                         <div className="flex justify-between mb-4">
                             <h2 className="text-xl font-bold">Kids</h2>
@@ -370,7 +715,7 @@
                         </div>
                         <div className="flex gap-3 flex-wrap">
                             {kids.map(k => (
-                                <div key={k.id} className="flex items-center gap-2 px-4 py-2 rounded-full shadow-md" style={{ backgroundColor: k.color + '30' }}>
+                                <div key={k.id} className="flex items-center gap-2 px-4 py-2 rounded-full" style={{ backgroundColor: k.color + '30' }}>
                                     <span style={{ color: k.color }}>{k.name}</span>
                                     <button onClick={() => delKid(k.id)} className="text-red-500">×</button>
                                 </div>
@@ -390,249 +735,197 @@
                         )}
                     </div>
 
-                    <div className="flex gap-2 mb-4">
-                        <button onClick={() => setMainView('activities')} className={`px-4 py-2 rounded-lg ${mainView === 'activities' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Activities</button>
-                        <button onClick={() => setMainView('balance')} className={`px-4 py-2 rounded-lg ${mainView === 'balance' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Balance Dashboard</button>
-                    </div>
-
-                    {mainView === 'balance' ? (
-                        <div className="space-y-6">
-                            <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg">
-                                <h3 className="text-2xl font-bold mb-4">📊 Parent Load Balance</h3>
-                                <div className="space-y-4">
-                                    <div>
-                                        <p className="text-sm font-semibold mb-2">Activities Created:</p>
-                                        <div className="flex gap-4">
-                                            <div>Mom: <span className="font-bold text-2xl">{parentLoad.created.Mom || 0}</span></div>
-                                            <div>Dad: <span className="font-bold text-2xl">{parentLoad.created.Dad || 0}</span></div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-semibold mb-2">Activities Assigned:</p>
-                                        <div className="flex gap-4">
-                                            <div>Mom: <span className="font-bold text-2xl">{parentLoad.balance.Mom || 0}</span></div>
-                                            <div>Dad: <span className="font-bold text-2xl">{parentLoad.balance.Dad || 0}</span></div>
-                                            <div>Both: <span className="font-bold text-2xl">{parentLoad.balance.Both || 0}</span></div>
-                                        </div>
-                                    </div>
-                                    {parentLoad.created.Mom > 0 || parentLoad.created.Dad > 0 ? (
-                                        <div className="mt-4 p-4 bg-white rounded-lg">
-                                            <p className="text-sm">
-                                                {parentLoad.created.Mom > parentLoad.created.Dad * 2 ? 
-                                                    '💡 Dad: Help balance the mental load by creating more activities!' :
-                                                    parentLoad.created.Dad > parentLoad.created.Mom * 2 ?
-                                                    '💡 Mom: Help balance the mental load by creating more activities!' :
-                                                    '✅ Great balance on activity creation!'}
-                                            </p>
-                                        </div>
-                                    ) : null}
-                                </div>
+                    <div>
+                        <div className="flex justify-between mb-4 flex-wrap gap-2">
+                            <h2 className="text-xl font-bold">Activities</h2>
+                            <div className="flex gap-2 flex-wrap">
+                                {view === 'list' && (
+                                    <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 border rounded bg-white">
+                                        <option value="none">No Grouping</option>
+                                        <option value="title">Group by Activity</option>
+                                        <option value="kid">Group by Kid</option>
+                                        <option value="type">Group by Type</option>
+                                        <option value="parent">Group by Parent</option>
+                                    </select>
+                                )}
+                                <button onClick={() => setView('list')} className={`px-3 py-2 rounded ${view === 'list' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>List</button>
+                                <button onClick={() => setView('calendar')} className={`px-3 py-2 rounded ${view === 'calendar' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Calendar</button>
+                                <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add Detailed</button>
                             </div>
+                        </div>
 
-                            <div className="bg-gradient-to-r from-blue-50 to-cyan-50 p-6 rounded-lg">
-                                <h3 className="text-2xl font-bold mb-4">🎯 Activity Balance by Category</h3>
-                                {Object.keys(categoryBalance).length === 0 ? (
-                                    <p className="text-gray-500">No activities yet</p>
-                                ) : (
-                                    <div className="space-y-4">
-                                        {Object.entries(categoryBalance).map(([cat, data]) => (
-                                            <div key={cat} className="bg-white p-4 rounded-lg">
-                                                <h4 className="font-bold text-lg mb-2">{cat}</h4>
-                                                <p className="text-sm text-gray-600 mb-2">Total: {data.total}</p>
-                                                <div className="flex gap-4">
-                                                    {Object.entries(data.byKid).map(([kidName, count]) => (
-                                                        <div key={kidName} className="text-sm">
-                                                            {kidName}: <span className="font-bold">{count}</span>
+                        {showAct && (
+                            <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                                <select value={newAct.kidId} onChange={e => setNewAct({ ...newAct, kidId: e.target.value })} className="w-full px-4 py-2 border rounded mb-2">
+                                    <option value="">Select Kid</option>
+                                    {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+                                </select>
+                                <input value={newAct.title} onChange={e => setNewAct({ ...newAct, title: e.target.value })} placeholder="Activity" className="w-full px-4 py-2 border rounded mb-2" />
+                                <input type="date" value={newAct.date} onChange={e => setNewAct({ ...newAct, date: e.target.value })} className="w-full px-4 py-2 border rounded mb-2" />
+                                <input type="time" value={newAct.time} onChange={e => setNewAct({ ...newAct, time: e.target.value })} className="w-full px-4 py-2 border rounded mb-2" />
+                                <input value={newAct.location} onChange={e => setNewAct({ ...newAct, location: e.target.value })} placeholder="Location" className="w-full px-4 py-2 border rounded mb-2" />
+                                <select value={newAct.parent} onChange={e => setNewAct({ ...newAct, parent: e.target.value })} className="w-full px-4 py-2 border rounded mb-2">
+                                    <option>Mom</option>
+                                    <option>Dad</option>
+                                    <option>Both</option>
+                                </select>
+                                <select value={newAct.type} onChange={e => setNewAct({ ...newAct, type: e.target.value })} className="w-full px-4 py-2 border rounded mb-2">
+                                    <option>Pick Up</option>
+                                    <option>Drop Off</option>
+                                    <option>Other</option>
+                                </select>
+                                <select value={newAct.recurring} onChange={e => setNewAct({ ...newAct, recurring: e.target.value })} className="w-full px-4 py-2 border rounded mb-2">
+                                    <option value="none">One-time</option>
+                                    <option value="daily">Daily (30 days)</option>
+                                    <option value="weekly">Weekly (12 weeks)</option>
+                                    <option value="biweekly">Bi-weekly (12 times)</option>
+                                </select>
+                                <label className="flex items-center gap-2 mb-3 cursor-pointer">
+                                    <input type="checkbox" checked={newAct.notify} onChange={e => setNewAct({ ...newAct, notify: e.target.checked })} className="w-5 h-5" />
+                                    <span>🔔 Notify 30 min before</span>
+                                </label>
+                                <textarea value={newAct.notes} onChange={e => setNewAct({ ...newAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded mb-2" rows="2"></textarea>
+                                <button onClick={addAct} className="px-4 py-2 bg-green-500 text-white rounded mr-2">Add</button>
+                                <button onClick={() => setShowAct(false)} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                            </div>
+                        )}
+
+                        {view === 'calendar' ? (
+                            <div className="grid grid-cols-7 gap-2">
+                                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                                    <div key={d} className="text-center font-bold p-2 bg-gray-100 rounded text-sm">{d}</div>
+                                ))}
+                                {(() => {
+                                    const now = new Date();
+                                    const year = now.getFullYear();
+                                    const month = now.getMonth();
+                                    const firstDay = new Date(year, month, 1).getDay();
+                                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                                    const days = [];
+                                    
+                                    for (let i = 0; i < firstDay; i++) {
+                                        days.push(<div key={`e-${i}`} className="p-2 h-24 border rounded bg-gray-50"></div>);
+                                    }
+                                    
+                                    for (let day = 1; day <= daysInMonth; day++) {
+                                        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                        const dayActs = acts.filter(a => a.date === dateStr);
+                                        const isPast = dateStr < today;
+                                        days.push(
+                                            <div key={day} className={`p-2 h-24 border rounded overflow-y-auto ${isPast ? 'bg-gray-100' : 'bg-white'}`}>
+                                                <div className={`font-bold text-sm mb-1 ${isPast ? 'text-gray-400' : ''}`}>{day}</div>
+                                                {dayActs.map(a => {
+                                                    const kid = kids.find(k => k.id === a.kidId);
+                                                    return (
+                                                        <div key={a.id} className={`text-xs p-1 mb-1 rounded ${isPast ? 'opacity-50' : ''}`} style={{ backgroundColor: kid?.color + '40', borderLeft: `2px solid ${kid?.color}` }}>
+                                                            {a.notify && '🔔 '}{a.time} {a.title}
                                                         </div>
-                                                    ))}
-                                                </div>
+                                                    );
+                                                })}
                                             </div>
-                                        ))}
+                                        );
+                                    }
+                                    return days;
+                                })()}
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <h3 className="font-bold text-lg">Upcoming</h3>
+                                {upcoming.length === 0 ? <p className="text-gray-500 text-center py-4">No upcoming activities</p> : (() => {
+                                    const grouped = groupActivities(upcoming);
+                                    return Object.keys(grouped).map(groupName => {
+                                        const groupActs = grouped[groupName];
+                                        const isExpanded = expandedGroups[groupName] !== false;
+                                        
+                                        if (groupBy === 'none') {
+                                            return groupActs.map(a => {
+                                                const kid = kids.find(k => k.id === a.kidId);
+                                                return (
+                                                    <div key={a.id} className="p-4 border-l-4 rounded shadow bg-white" style={{ borderLeftColor: kid?.color }}>
+                                                        <div className="flex justify-between">
+                                                            <div>
+                                                                <h3 className="font-bold">
+                                                                    {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
+                                                                    {a.recurringId && <span className="ml-2 text-xs bg-purple-100 px-2 py-1 rounded">Recurring</span>}
+                                                                </h3>
+                                                                <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent} | {a.location}</p>
+                                                                {a.notes && <p className="text-sm text-gray-500 mt-1">{a.notes}</p>}
+                                                            </div>
+                                                            <button onClick={() => delAct(a.id)} className="text-red-500 text-xl">×</button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            });
+                                        }
+                                        
+                                        return (
+                                            <div key={groupName} className="border rounded-lg overflow-hidden">
+                                                <button
+                                                    onClick={() => toggleGroup(groupName)}
+                                                    className="w-full p-4 bg-gradient-to-r from-purple-50 to-blue-50 flex justify-between items-center hover:from-purple-100 hover:to-blue-100 transition"
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-2xl">{isExpanded ? '▼' : '▶'}</span>
+                                                        <div className="text-left">
+                                                            <h3 className="font-bold text-lg">{groupName}</h3>
+                                                            <p className="text-sm text-gray-600">{groupActs.length} {groupActs.length === 1 ? 'activity' : 'activities'}</p>
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                                {isExpanded && (
+                                                    <div className="p-2 space-y-2">
+                                                        {groupActs.map(a => {
+                                                            const kid = kids.find(k => k.id === a.kidId);
+                                                            return (
+                                                                <div key={a.id} className="p-3 border-l-4 rounded bg-white shadow-sm" style={{ borderLeftColor: kid?.color }}>
+                                                                    <div className="flex justify-between">
+                                                                        <div>
+                                                                            <h4 className="font-semibold">
+                                                                                {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
+                                                                                {a.recurringId && <span className="ml-2 text-xs bg-purple-100 px-2 py-1 rounded">Recurring</span>}
+                                                                            </h4>
+                                                                            <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent} | {a.location}</p>
+                                                                            {a.notes && <p className="text-sm text-gray-500 mt-1">{a.notes}</p>}
+                                                                        </div>
+                                                                        <button onClick={() => delAct(a.id)} className="text-red-500 text-xl">×</button>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    });
+                                })()}
+
+                                {past.length > 0 && (
+                                    <div className="mt-6">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h3 className="font-bold text-lg text-gray-500">Past Activities</h3>
+                                            <button onClick={() => setShowPast(!showPast)} className="text-sm text-purple-600">
+                                                {showPast ? 'Hide' : `Show (${past.length})`}
+                                            </button>
+                                        </div>
+                                        {showPast && past.map(a => {
+                                            const kid = kids.find(k => k.id === a.kidId);
+                                            return (
+                                                <div key={a.id} className="p-4 border-l-4 rounded shadow bg-gray-50 opacity-60 mb-2" style={{ borderLeftColor: kid?.color }}>
+                                                    <div className="flex justify-between">
+                                                        <div>
+                                                            <h3 className="font-bold text-gray-600">{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span></h3>
+                                                            <p className="text-sm text-gray-500">{a.date} {a.time} | {a.type} | {a.parent}</p>
+                                                        </div>
+                                                        <button onClick={() => delAct(a.id)} className="text-red-400">×</button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
-                        </div>
-                    ) : (
-                        <div>
-                            <div className="flex justify-between mb-4 flex-wrap gap-2">
-                                <h2 className="text-xl font-bold">Activities</h2>
-                                <div className="flex gap-2 flex-wrap">
-                                    {view === 'list' && (
-                                        <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 border rounded bg-white">
-                                            <option value="none">No Grouping</option>
-                                            <option value="title">Group by Activity</option>
-                                            <option value="kid">Group by Kid</option>
-                                            <option value="type">Group by Type</option>
-                                            <option value="parent">Group by Parent</option>
-                                        </select>
-                                    )}
-                                    <button onClick={() => setView('list')} className={`px-3 py-2 rounded ${view === 'list' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>List</button>
-                                    <button onClick={() => setView('calendar')} className={`px-3 py-2 rounded ${view === 'calendar' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Calendar</button>
-                                    <button onClick={() => setShowRecommend(true)} className="px-4 py-2 bg-purple-500 text-white rounded-lg">🤖 AI Suggest</button>
-                                    <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add</button>
-                                </div>
-                            </div>
-
-                            {showRecommend && (
-                                <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border-2 border-purple-200">
-                                    <h3 className="font-bold text-xl mb-3 text-purple-800">🤖 AI Activity Recommendations</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                                        <input type="text" value={recLocation} onChange={e => setRecLocation(e.target.value)} placeholder="Location (e.g., Seattle, WA)" className="px-4 py-2 border rounded-lg" />
-                                        <input type="text" value={recPreferences} onChange={e => setRecPreferences(e.target.value)} placeholder="Preferences (optional)" className="px-4 py-2 border rounded-lg" />
-                                    </div>
-                                    <div className="flex gap-2 mb-4">
-                                        <button onClick={getRecommendations} disabled={recLoading} className="px-6 py-2 bg-purple-600 text-white rounded-lg">
-                                            {recLoading ? '🔄 Getting...' : '🤖 Get Recommendations'}
-                                        </button>
-                                        <button onClick={() => { setShowRecommend(false); setRecommendations([]); }} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
-                                    </div>
-
-                                    {recommendations.length > 0 && (
-                                        <div className="bg-white rounded-lg p-4 max-h-96 overflow-y-auto">
-                                            <h4 className="font-bold mb-3 text-lg">Suggested Activities:</h4>
-                                            <div className="space-y-3">
-                                                {recommendations.map((rec, idx) => (
-                                                    <div key={idx} className="border rounded-lg p-4">
-                                                        <h5 className="font-bold text-purple-700 mb-1">{rec.title}</h5>
-                                                        <p className="text-sm text-gray-600 mb-1">{rec.venue}</p>
-                                                        {rec.websiteUrl && <a href={rec.websiteUrl} target="_blank" className="text-xs text-blue-600 hover:underline">🔗 Visit Website</a>}
-                                                        {rec.notes && <p className="text-sm text-gray-500 mb-2">{rec.notes}</p>}
-                                                        <div className="flex flex-wrap gap-2 mt-2">
-                                                            {kids.map(kid => (
-                                                                <button key={kid.id} onClick={() => addRecommendedActivity(rec, kid.id)} className="px-3 py-1 text-xs rounded-full text-white" style={{ backgroundColor: kid.color }}>
-                                                                    Add for {kid.name}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {showAct && (
-                                <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        <select value={newAct.kidId} onChange={e => setNewAct({ ...newAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
-                                            <option value="">Select Kid</option>
-                                            {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
-                                        </select>
-                                        <input value={newAct.title} onChange={e => { setNewAct({ ...newAct, title: e.target.value }); getSuggestedPrepTasks(e.target.value); }} placeholder="Activity" className="px-4 py-2 border rounded" />
-                                        <input type="date" value={newAct.date} onChange={e => setNewAct({ ...newAct, date: e.target.value })} className="px-4 py-2 border rounded" />
-                                        <input type="time" value={newAct.time} onChange={e => setNewAct({ ...newAct, time: e.target.value })} className="px-4 py-2 border rounded" />
-                                        <input value={newAct.location} onChange={e => setNewAct({ ...newAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
-                                        <select value={newAct.parent} onChange={e => setNewAct({ ...newAct, parent: e.target.value })} className="px-4 py-2 border rounded">
-                                            <option>Mom</option>
-                                            <option>Dad</option>
-                                            <option>Both</option>
-                                        </select>
-                                        <select value={newAct.type} onChange={e => setNewAct({ ...newAct, type: e.target.value })} className="px-4 py-2 border rounded">
-                                            <option>Pick Up</option>
-                                            <option>Drop Off</option>
-                                            <option>Other</option>
-                                        </select>
-                                        <select value={newAct.activityCategory} onChange={e => setNewAct({ ...newAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
-                                            <option>Physical</option>
-                                            <option>Social</option>
-                                            <option>Creative</option>
-                                            <option>Academic</option>
-                                            <option>Other</option>
-                                        </select>
-                                        <select value={newAct.createdBy} onChange={e => setNewAct({ ...newAct, createdBy: e.target.value })} className="px-4 py-2 border rounded">
-                                            <option>Mom</option>
-                                            <option>Dad</option>
-                                        </select>
-                                        <select value={newAct.recurring} onChange={e => setNewAct({ ...newAct, recurring: e.target.value })} className="px-4 py-2 border rounded">
-                                            <option value="none">One-time</option>
-                                            <option value="daily">Daily</option>
-                                            <option value="weekly">Weekly</option>
-                                            <option value="biweekly">Bi-weekly</option>
-                                        </select>
-                                    </div>
-                                    
-                                    {loadingPrepTasks && <p className="text-sm text-gray-500 mt-3">AI suggesting prep tasks...</p>}
-                                    {suggestedPrepTasks.length > 0 && (
-                                        <div className="mt-3">
-                                            <p className="text-sm font-semibold mb-2">✨ AI Suggested Prep Tasks:</p>
-                                            <div className="space-y-1">
-                                                {suggestedPrepTasks.map((task, idx) => (
-                                                    <label key={idx} className="flex items-center gap-2 text-sm">
-                                                        <input type="checkbox" checked={newAct.prepTasks.includes(task)} onChange={e => {
-                                                            if (e.target.checked) {
-                                                                setNewAct({ ...newAct, prepTasks: [...newAct.prepTasks, task] });
-                                                            } else {
-                                                                setNewAct({ ...newAct, prepTasks: newAct.prepTasks.filter(t => t !== task) });
-                                                            }
-                                                        }} />
-                                                        {task}
-                                                    </label>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <label className="flex items-center gap-2 mt-3">
-                                        <input type="checkbox" checked={newAct.notify} onChange={e => setNewAct({ ...newAct, notify: e.target.checked })} />
-                                        <span className="text-sm">🔔 Notify 30 min before</span>
-                                    </label>
-                                    
-                                    <textarea value={newAct.notes} onChange={e => setNewAct({ ...newAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded mt-3" rows="2"></textarea>
-                                    
-                                    <div className="flex gap-2 mt-3">
-                                        <button onClick={addAct} className="px-4 py-2 bg-green-500 text-white rounded">Add</button>
-                                        <button onClick={() => { setShowAct(false); setSuggestedPrepTasks([]); }} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="space-y-3">
-                                {upcoming.length === 0 ? <p className="text-gray-500 text-center py-4">No upcoming activities</p> : upcoming.map(a => {
-                                    const kid = kids.find(k => k.id === a.kidId);
-                                    const isExpanded = expandedActivities[a.id];
-                                    return (
-                                        <div key={a.id} className="p-4 border-l-4 rounded shadow bg-white" style={{ borderLeftColor: kid?.color }}>
-                                            <div className="flex justify-between items-start">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2">
-                                                        <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 hover:text-gray-700">
-                                                            {isExpanded ? '▼' : '▶'}
-                                                        </button>
-                                                        <div>
-                                                            <h3 className="font-bold">
-                                                                {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
-                                                                {a.prepTasks?.length > 0 && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">+{a.prepTasks.length} tasks</span>}
-                                                            </h3>
-                                                            <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent}</p>
-                                                            
-                                                            {isExpanded && (
-                                                                <div className="mt-2 p-3 bg-gray-50 rounded text-sm">
-                                                                    <p><strong>Location:</strong> {a.location || 'Not specified'}</p>
-                                                                    <p><strong>Category:</strong> {a.activityCategory || 'Other'}</p>
-                                                                    <p><strong>Created by:</strong> {a.createdBy || 'Unknown'}</p>
-                                                                    {a.notes && <p><strong>Notes:</strong> {a.notes}</p>}
-                                                                    {a.prepTasks?.length > 0 && (
-                                                                        <div className="mt-2">
-                                                                            <p className="font-semibold mb-1">Prep Tasks:</p>
-                                                                            <ul className="list-disc ml-5">
-                                                                                {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
-                                                                            </ul>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <button onClick={() => delAct(a.id)} className="text-red-500 text-xl ml-2">×</button>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             </div>
         );
