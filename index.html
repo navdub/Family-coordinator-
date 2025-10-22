@@ -84,13 +84,8 @@
         const [showKid, setShowKid] = useState(false);
         const [showAct, setShowAct] = useState(false);
         const [showNL, setShowNL] = useState(false);
-        const [showRecommend, setShowRecommend] = useState(false);
         const [nlText, setNlText] = useState('');
         const [nlLoading, setNlLoading] = useState(false);
-        const [recLocation, setRecLocation] = useState('');
-        const [recPreferences, setRecPreferences] = useState('');
-        const [recommendations, setRecommendations] = useState([]);
-        const [recLoading, setRecLoading] = useState(false);
         const [showCode, setShowCode] = useState(false);
         const [showPast, setShowPast] = useState(false);
         const [view, setView] = useState('list');
@@ -165,10 +160,7 @@
         };
 
         const delKid = async (id) => {
-            const kid = kids.find(k => k.id === id);
-            const kidActivities = acts.filter(a => a.kidId === id);
-            const confirmMsg = `Are you sure you want to delete ${kid?.name}?\n\nThis will also delete ${kidActivities.length} activities associated with ${kid?.name}.`;
-            if (!confirm(confirmMsg)) return;
+            if (!confirm('Delete?')) return;
             await db.collection('kids').doc(id).delete();
             const snap = await db.collection('activities').where('kidId', '==', id).get();
             snap.forEach(d => d.ref.delete());
@@ -214,504 +206,47 @@
             setNlLoading(true);
 
             try {
-                const text = nlText.toLowerCase().trim();
-                
-                // Check for delete command
-                if (text.match(/\b(delete|remove|cancel)\b/i)) {
-                    await handleDeleteCommand(text);
-                    setNlLoading(false);
-                    return;
-                }
-                
-                // Check for edit/change command
-                if (text.match(/\b(change|edit|update|move|reschedule)\b/i)) {
-                    await handleEditCommand(text);
-                    setNlLoading(false);
-                    return;
-                }
-
-                // Otherwise, create new activity
-                const parsed = {};
-
-                // Find kid name
-                for (const kid of kids) {
-                    if (text.includes(kid.name.toLowerCase())) {
-                        parsed.kidId = kid.id;
-                        break;
-                    }
-                }
-
-                if (!parsed.kidId) {
-                    alert('Could not find kid name. Please mention one of: ' + kids.map(k => k.name).join(', '));
-                    setNlLoading(false);
-                    return;
-                }
-
-                // Find type (pick up, drop off)
-                if (text.match(/pick\s*up|pickup/i)) {
-                    parsed.type = 'Pick Up';
-                } else if (text.match(/drop\s*off|dropoff/i)) {
-                    parsed.type = 'Drop Off';
-                } else {
-                    parsed.type = 'Other';
-                }
-
-                // Find parent
-                if (text.match(/\bmom\b/i)) {
-                    parsed.parent = 'Mom';
-                } else if (text.match(/\bdad\b/i)) {
-                    parsed.parent = 'Dad';
-                } else if (text.match(/both|together/i)) {
-                    parsed.parent = 'Both';
-                } else {
-                    parsed.parent = 'Mom';
-                }
-
-                // Find date
-                const today = new Date();
-                if (text.match(/\btoday\b/i)) {
-                    parsed.date = today.toISOString().split('T')[0];
-                } else if (text.match(/\btomorrow\b/i)) {
-                    const tomorrow = new Date(today);
-                    tomorrow.setDate(tomorrow.getDate() + 1);
-                    parsed.date = tomorrow.toISOString().split('T')[0];
-                } else {
-                    // Check for day of week
-                    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-                    for (let i = 0; i < days.length; i++) {
-                        if (text.includes(days[i])) {
-                            const targetDay = i;
-                            const currentDay = today.getDay();
-                            let daysToAdd = targetDay - currentDay;
-                            if (daysToAdd <= 0) daysToAdd += 7;
-                            const targetDate = new Date(today);
-                            targetDate.setDate(today.getDate() + daysToAdd);
-                            parsed.date = targetDate.toISOString().split('T')[0];
-                            break;
-                        }
-                    }
-                }
-
-                // Check for YYYY-MM-DD format
-                const dateMatch = text.match(/\d{4}-\d{2}-\d{2}/);
-                if (dateMatch) {
-                    parsed.date = dateMatch[0];
-                }
-
-                // Find time
-                const timeMatch = text.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
-                if (timeMatch) {
-                    let hours = parseInt(timeMatch[1]);
-                    const minutes = timeMatch[2] || '00';
-                    const ampm = timeMatch[3]?.toLowerCase();
-
-                    if (ampm === 'pm' && hours < 12) hours += 12;
-                    if (ampm === 'am' && hours === 12) hours = 0;
-
-                    parsed.time = `${String(hours).padStart(2, '0')}:${minutes}`;
-                }
-
-                // Find location (words after "at" or "location")
-                const locationMatch = text.match(/\bat\s+([^,\.]+?)(?:\s+on|\s+at\s+\d|$)/i);
-                if (locationMatch) {
-                    parsed.location = locationMatch[1].trim();
-                }
-
-                // Find activity title
-                let titleText = text
-                    .replace(/(pick\s*up|drop\s*off)/gi, '')
-                    .replace(/\b(mom|dad|both)\b/gi, '')
-                    .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
-                    .replace(/\d{1,2}:?\d{0,2}\s*(am|pm)?/gi, '')
-                    .replace(/\bat\s+[^,\.]+/gi, '')
-                    .replace(/(has|have|needs?|going\s+to)/gi, '');
-
-                const titleWords = titleText.split(/\s+/).filter(w => 
-                    w.length > 2 && 
-                    !kids.some(k => k.name.toLowerCase() === w.toLowerCase())
-                );
-
-                if (titleWords.length > 0) {
-                    parsed.title = titleWords.slice(0, 3).join(' ').trim()
-                        .replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '');
-                }
-
-                if (parsed.title) {
-                    parsed.title = parsed.title.charAt(0).toUpperCase() + parsed.title.slice(1);
-                }
-
-                if (parsed.location) {
-                    parsed.location = parsed.location.charAt(0).toUpperCase() + parsed.location.slice(1);
-                }
-
-                if (!parsed.title) parsed.title = 'Activity';
-                if (!parsed.date) parsed.date = today.toISOString().split('T')[0];
-                if (!parsed.location) parsed.location = '';
-
-                setNewAct({
-                    kidId: parsed.kidId,
-                    title: parsed.title,
-                    date: parsed.date,
-                    time: parsed.time || '',
-                    location: parsed.location,
-                    parent: parsed.parent,
-                    notes: `Created from: "${nlText}"`,
-                    duration: 60,
-                    type: parsed.type,
-                    notify: false,
-                    recurring: 'none'
+                const response = await fetch('/api/parse-activity', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: nlText, kids })
                 });
 
-                setShowNL(false);
-                setShowAct(true);
-                setNlText('');
+                if (!response.ok) throw new Error('Failed to parse');
+
+                const parsed = await response.json();
+                
+                // Find kid by name
+                const kid = kids.find(k => k.name.toLowerCase() === parsed.kidName?.toLowerCase());
+                
+                if (kid) {
+                    setNewAct({
+                        kidId: kid.id,
+                        title: parsed.title || '',
+                        date: parsed.date || '',
+                        time: parsed.time || '',
+                        location: parsed.location || '',
+                        parent: parsed.parent || 'Mom',
+                        notes: parsed.notes || '',
+                        duration: 60,
+                        type: parsed.type || 'Other',
+                        notify: false,
+                        recurring: 'none'
+                    });
+                    setShowNL(false);
+                    setShowAct(true);
+                    setNlText('');
+                } else {
+                    alert('Could not find kid: ' + (parsed.kidName || 'unknown'));
+                }
             } catch (error) {
                 alert('Error parsing: ' + error.message);
             }
             setNlLoading(false);
         };
 
-        const handleDeleteCommand = async (text) => {
-            console.log('Delete command:', text);
-            console.log('Available activities:', acts.length);
-
-            // Find kid name
-            let kidId = null;
-            let kidName = '';
-            for (const kid of kids) {
-                if (text.includes(kid.name.toLowerCase())) {
-                    kidId = kid.id;
-                    kidName = kid.name;
-                    break;
-                }
-            }
-
-            console.log('Found kid:', kidName || 'none');
-
-            // Find activity title keywords
-            const titleKeywords = text
-                .replace(/\b(delete|remove|cancel|'s)\b/gi, '')
-                .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
-                .replace(/\bon\b/gi, '')
-                .replace(/\bthe\b/gi, '')
-                .split(/\s+/)
-                .filter(w => w.length > 2 && !kids.some(k => k.name.toLowerCase() === w.toLowerCase()));
-
-            console.log('Title keywords:', titleKeywords);
-
-            // Find date
-            const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-            let targetDate = null;
-            for (let i = 0; i < days.length; i++) {
-                if (text.includes(days[i])) {
-                    const today = new Date();
-                    const targetDay = i;
-                    const currentDay = today.getDay();
-                    let daysToAdd = targetDay - currentDay;
-                    if (daysToAdd <= 0) daysToAdd += 7;
-                    const date = new Date(today);
-                    date.setDate(today.getDate() + daysToAdd);
-                    targetDate = date.toISOString().split('T')[0];
-                    break;
-                }
-            }
-
-            if (text.match(/\btoday\b/i)) {
-                targetDate = new Date().toISOString().split('T')[0];
-            } else if (text.match(/\btomorrow\b/i)) {
-                const tomorrow = new Date();
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                targetDate = tomorrow.toISOString().split('T')[0];
-            }
-
-            console.log('Target date:', targetDate || 'none');
-
-            // Find matching activities - be more flexible
-            let matches = acts.filter(a => {
-                // Must match kid if specified
-                if (kidId && a.kidId !== kidId) return false;
-                
-                // Must match date if specified
-                if (targetDate && a.date !== targetDate) return false;
-                
-                // If we have keywords, at least one must match
-                if (titleKeywords.length > 0) {
-                    const hasMatch = titleKeywords.some(kw => 
-                        a.title.toLowerCase().includes(kw.toLowerCase())
-                    );
-                    if (!hasMatch) return false;
-                }
-                
-                return true;
-            });
-
-            console.log('Matches found:', matches.length);
-
-            if (matches.length === 0) {
-                // Show debug info
-                const debugInfo = `No matching activities found.\n\nSearching for:\n- Kid: ${kidName || 'any'}\n- Keywords: ${titleKeywords.join(', ') || 'none'}\n- Date: ${targetDate || 'any'}\n\nYour activities:\n${acts.map(a => {
-                    const k = kids.find(kid => kid.id === a.kidId);
-                    return `${a.title} - ${k?.name} on ${a.date}`;
-                }).join('\n')}`;
-                alert(debugInfo);
-                setShowNL(false);
-                setNlText('');
-                return;
-            }
-
-            if (matches.length === 1) {
-                const activity = matches[0];
-                const kid = kids.find(k => k.id === activity.kidId);
-                const confirmMsg = `Delete this activity?\n\n${activity.title} - ${kid?.name}\n${activity.date} ${activity.time}`;
-                if (confirm(confirmMsg)) {
-                    try {
-                        await db.collection('activities').doc(activity.id).delete();
-                        alert('Activity deleted successfully!');
-                    } catch (error) {
-                        alert('Error deleting: ' + error.message);
-                    }
-                }
-            } else {
-                const list = matches.map((a, i) => {
-                    const kid = kids.find(k => k.id === a.kidId);
-                    return `${i + 1}. ${a.title} - ${kid?.name} on ${a.date} at ${a.time}`;
-                }).join('\n');
-                alert(`Found ${matches.length} matching activities:\n\n${list}\n\nPlease be more specific (add kid name or date).`);
-            }
-
-            setShowNL(false);
-            setNlText('');
-        };
-
-        const getRecommendations = async () => {
-            if (!recLocation.trim()) {
-                alert('Please enter a location');
-                return;
-            }
-
-            setRecLoading(true);
-            setRecommendations([]);
-
-            try {
-                const response = await fetch('/api/recommend-activities', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        location: recLocation,
-                        kids: kids,
-                        preferences: recPreferences
-                    })
-                });
-
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error || 'Failed to get recommendations');
-                }
-
-                const data = await response.json();
-                setRecommendations(data.recommendations || []);
-            } catch (error) {
-                alert('Error getting recommendations: ' + error.message);
-            }
-
-            setRecLoading(false);
-        };
-
-        const addRecommendedActivity = (rec, kidId) => {
-            const today = new Date();
-            setNewAct({
-                kidId: kidId,
-                title: rec.title,
-                date: today.toISOString().split('T')[0],
-                time: '',
-                location: rec.venue || '',
-                parent: 'Mom',
-                notes: rec.notes || '',
-                duration: rec.duration || 60,
-                type: rec.type || 'Other',
-                notify: false,
-                recurring: 'none'
-            });
-            setShowRecommend(false);
-            setShowAct(true);
-        };
-
-        const handleEditCommand = async (text) => {
-            console.log('Edit command:', text);
-
-            // Find kid name
-            let kidId = null;
-            let kidName = '';
-            for (const kid of kids) {
-                if (text.includes(kid.name.toLowerCase())) {
-                    kidId = kid.id;
-                    kidName = kid.name;
-                    break;
-                }
-            }
-
-            console.log('Found kid:', kidName || 'none');
-
-            // Find OLD date (mentioned first, usually with "on")
-            let oldDate = null;
-            const onDateMatch = text.match(/\bon\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})/i);
-            if (onDateMatch) {
-                const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-                const monthIndex = months.indexOf(onDateMatch[1].toLowerCase());
-                const day = parseInt(onDateMatch[2]);
-                const year = new Date().getFullYear();
-                oldDate = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            }
-
-            console.log('Old date:', oldDate || 'none');
-
-            // Find activity title keywords (before "from" or "to")
-            const beforeFromTo = text.split(/\b(from|to)\b/i)[0];
-            const titleKeywords = beforeFromTo
-                .replace(/\b(change|edit|update|move|reschedule)\b/gi, '')
-                .replace(/\bon\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}/gi, '')
-                .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
-                .split(/\s+/)
-                .filter(w => w.length > 2 && !kids.some(k => k.name.toLowerCase() === w.toLowerCase()));
-
-            console.log('Title keywords:', titleKeywords);
-
-            // Find what to change (after "from" and "to")
-            const parts = text.split(/\b(from|to)\b/i);
-            let fromPart = '';
-            let toPart = '';
-            
-            if (parts.length >= 3) {
-                const fromIndex = parts.findIndex(p => p.toLowerCase() === 'from');
-                const toIndex = parts.findIndex(p => p.toLowerCase() === 'to');
-                
-                if (fromIndex > 0 && toIndex > fromIndex) {
-                    fromPart = parts.slice(fromIndex + 1, toIndex).join('').trim();
-                    toPart = parts.slice(toIndex + 1).join('').trim();
-                } else if (toIndex > 0) {
-                    toPart = parts.slice(toIndex + 1).join('').trim();
-                }
-            }
-
-            console.log('From part:', fromPart);
-            console.log('To part:', toPart);
-
-            // Parse old time from "from" part
-            let oldTime = null;
-            const fromTimeMatch = fromPart.match(/(\d{1,2}):?(\d{2})/);
-            if (fromTimeMatch) {
-                oldTime = `${String(fromTimeMatch[1]).padStart(2, '0')}:${fromTimeMatch[2]}`;
-            }
-
-            console.log('Old time:', oldTime || 'none');
-
-            // Parse new time from "to" part
-            let newTime = null;
-            const toTimeMatch = toPart.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
-            if (toTimeMatch) {
-                let hours = parseInt(toTimeMatch[1]);
-                const minutes = toTimeMatch[2] || '00';
-                const ampm = toTimeMatch[3]?.toLowerCase();
-                if (ampm === 'pm' && hours < 12) hours += 12;
-                if (ampm === 'am' && hours === 12) hours = 0;
-                newTime = `${String(hours).padStart(2, '0')}:${minutes}`;
-            }
-
-            console.log('New time:', newTime || 'none');
-
-            // Find new date from "to" part
-            const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-            let newDate = null;
-            for (let i = 0; i < days.length; i++) {
-                if (toPart.includes(days[i])) {
-                    const today = new Date();
-                    const targetDay = i;
-                    const currentDay = today.getDay();
-                    let daysToAdd = targetDay - currentDay;
-                    if (daysToAdd <= 0) daysToAdd += 7;
-                    const date = new Date(today);
-                    date.setDate(today.getDate() + daysToAdd);
-                    newDate = date.toISOString().split('T')[0];
-                    break;
-                }
-            }
-
-            console.log('New date:', newDate || 'none');
-
-            // Find matching activities - use old date and old time if specified
-            let matches = acts.filter(a => {
-                // Must match kid if specified
-                if (kidId && a.kidId !== kidId) return false;
-                
-                // Must match old date if specified
-                if (oldDate && a.date !== oldDate) return false;
-                
-                // Must match old time if specified
-                if (oldTime && a.time !== oldTime) return false;
-                
-                // If we have title keywords, at least one must match
-                if (titleKeywords.length > 0) {
-                    const hasMatch = titleKeywords.some(kw => 
-                        a.title.toLowerCase().includes(kw.toLowerCase())
-                    );
-                    if (!hasMatch) return false;
-                }
-                
-                return true;
-            });
-
-            console.log('Matches found:', matches.length);
-
-            if (matches.length === 0) {
-                const debugInfo = `No matching activities found.\n\nSearching for:\n- Kid: ${kidName || 'any'}\n- Date: ${oldDate || 'any'}\n- Time: ${oldTime || 'any'}\n- Keywords: ${titleKeywords.join(', ') || 'none'}\n\nTry including the date like: "update Emma Playdate on October 22 from 14:00 to 15:00"`;
-                alert(debugInfo);
-                setShowNL(false);
-                setNlText('');
-                return;
-            }
-
-            if (matches.length === 1) {
-                const activity = matches[0];
-                const updates = {};
-                if (newTime) updates.time = newTime;
-                if (newDate) updates.date = newDate;
-
-                if (Object.keys(updates).length === 0) {
-                    alert('Could not understand what to change.\n\nTry:\n- "change Emma soccer to 4pm"\n- "move Liam piano to Friday"\n- "update Emma practice from 3pm to 4pm"');
-                    setShowNL(false);
-                    setNlText('');
-                    return;
-                }
-
-                const kid = kids.find(k => k.id === activity.kidId);
-                const changes = Object.entries(updates).map(([k, v]) => `${k}: ${v}`).join(', ');
-                const confirmMsg = `Update this activity?\n\n${activity.title} - ${kid?.name}\nOld: ${activity.date} ${activity.time}\n\nChanges: ${changes}`;
-                
-                if (confirm(confirmMsg)) {
-                    try {
-                        await db.collection('activities').doc(activity.id).update(updates);
-                        alert('Activity updated successfully!');
-                    } catch (error) {
-                        alert('Error updating: ' + error.message);
-                    }
-                }
-            } else {
-                const list = matches.map((a, i) => {
-                    const kid = kids.find(k => k.id === a.kidId);
-                    return `${i + 1}. ${a.title} - ${kid?.name} on ${a.date} at ${a.time}`;
-                }).join('\n');
-                alert(`Found ${matches.length} matching activities:\n\n${list}\n\nTo update a specific one, include BOTH the date and old time:\n"update ${kidName || '[Kid]'} ${titleKeywords[0] || '[Activity]'} on October 22 from 14:00 to 15:00"`);
-            }
-
-            setShowNL(false);
-            setNlText('');
-        };
-
         const delAct = async (id) => {
-            const activity = acts.find(a => a.id === id);
-            const kid = kids.find(k => k.id === activity?.kidId);
-            const confirmMsg = `Are you sure you want to delete this activity?\n\n${activity?.title} - ${kid?.name}\n${activity?.date} ${activity?.time}`;
-            if (!confirm(confirmMsg)) return;
+            if (!confirm('Delete?')) return;
             await db.collection('activities').doc(id).delete();
         };
 
@@ -757,69 +292,6 @@
                             <button onClick={() => setShowCode(true)} className="px-4 py-2 bg-purple-100 rounded-lg">Share</button>
                             <button onClick={logout} className="px-4 py-2 bg-gray-100 rounded-lg">Logout</button>
                         </div>
-                    </div>
-
-                    {/* Quick Add Box - Prominent on landing */}
-                    <div className="mb-6 p-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl shadow-lg">
-                        <div className="flex justify-between items-center mb-3">
-                            <div>
-                                <h2 className="text-2xl font-bold text-white mb-1">✨ Quick Actions</h2>
-                                <p className="text-blue-100 text-sm">Add, edit, or delete activities with natural language</p>
-                            </div>
-                            {!showNL && (
-                                <button 
-                                    onClick={() => setShowNL(true)} 
-                                    className="px-6 py-3 bg-white text-blue-600 rounded-lg font-bold hover:bg-blue-50 transition shadow-md"
-                                >
-                                    Start Typing
-                                </button>
-                            )}
-                        </div>
-                        
-                        {showNL && (
-                            <div className="bg-white rounded-lg p-4">
-                                <p className="text-sm text-gray-600 mb-2"><strong>What you can do:</strong></p>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
-                                    <div className="bg-green-50 p-2 rounded">
-                                        <p className="font-semibold text-xs text-green-800 mb-1">➕ ADD</p>
-                                        <p className="text-xs text-gray-600">"Emma soccer Tuesday 4pm"</p>
-                                    </div>
-                                    <div className="bg-blue-50 p-2 rounded">
-                                        <p className="font-semibold text-xs text-blue-800 mb-1">✏️ EDIT</p>
-                                        <p className="text-xs text-gray-600">"change Emma soccer to 5pm"</p>
-                                        <p className="text-xs text-gray-600">"move Liam piano to Friday"</p>
-                                    </div>
-                                    <div className="bg-red-50 p-2 rounded">
-                                        <p className="font-semibold text-xs text-red-800 mb-1">🗑️ DELETE</p>
-                                        <p className="text-xs text-gray-600">"delete Emma soccer Tuesday"</p>
-                                        <p className="text-xs text-gray-600">"cancel Liam's piano"</p>
-                                    </div>
-                                </div>
-                                <textarea 
-                                    value={nlText} 
-                                    onChange={e => setNlText(e.target.value)}
-                                    placeholder="Type what you want to do..."
-                                    className="w-full px-4 py-3 border-2 border-blue-200 rounded-lg mb-3 focus:border-blue-500 focus:outline-none"
-                                    rows="2"
-                                    autoFocus
-                                />
-                                <div className="flex gap-2">
-                                    <button 
-                                        onClick={parseNaturalLanguage} 
-                                        disabled={nlLoading} 
-                                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-semibold"
-                                    >
-                                        {nlLoading ? '🔄 Processing...' : '✨ Execute'}
-                                    </button>
-                                    <button 
-                                        onClick={() => { setShowNL(false); setNlText(''); }} 
-                                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        )}
                     </div>
 
                     {showCode && (
@@ -877,86 +349,28 @@
                                 )}
                                 <button onClick={() => setView('list')} className={`px-3 py-2 rounded ${view === 'list' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>List</button>
                                 <button onClick={() => setView('calendar')} className={`px-3 py-2 rounded ${view === 'calendar' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Calendar</button>
-                                <button onClick={() => setShowRecommend(true)} className="px-4 py-2 bg-purple-500 text-white rounded-lg">🤖 AI Suggest</button>
-                                <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add Detailed</button>
+                                <button onClick={() => setShowNL(true)} className="px-4 py-2 bg-blue-500 text-white rounded-lg">✨ Quick Add</button>
+                                <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add</button>
                             </div>
                         </div>
 
-                        {showRecommend && (
-                            <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border-2 border-purple-200">
-                                <h3 className="font-bold text-xl mb-3 text-purple-800">🤖 AI Activity Recommendations</h3>
-                                <p className="text-sm text-gray-600 mb-4">Get personalized activity suggestions based on your location and kids!</p>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-1">Location *</label>
-                                        <input
-                                            type="text"
-                                            value={recLocation}
-                                            onChange={e => setRecLocation(e.target.value)}
-                                            placeholder="e.g., Seattle, WA or zip code"
-                                            className="w-full px-4 py-2 border rounded-lg"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-semibold mb-1">Preferences (optional)</label>
-                                        <input
-                                            type="text"
-                                            value={recPreferences}
-                                            onChange={e => setRecPreferences(e.target.value)}
-                                            placeholder="e.g., outdoor, indoor, educational"
-                                            className="w-full px-4 py-2 border rounded-lg"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-2 mb-4">
-                                    <button
-                                        onClick={getRecommendations}
-                                        disabled={recLoading}
-                                        className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-semibold"
-                                    >
-                                        {recLoading ? '🔄 Getting Suggestions...' : '🤖 Get AI Recommendations'}
+                        {showNL && (
+                            <div className="mb-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
+                                <h3 className="font-bold text-lg mb-2">✨ Quick Add with Natural Language</h3>
+                                <p className="text-sm text-gray-600 mb-3">Try: "Emma has soccer practice Tuesday at 4pm at the park" or "Pick up Liam tomorrow 3:30pm"</p>
+                                <textarea 
+                                    value={nlText} 
+                                    onChange={e => setNlText(e.target.value)}
+                                    placeholder="Type your activity in plain English..."
+                                    className="w-full px-4 py-3 border rounded-lg mb-3"
+                                    rows="3"
+                                />
+                                <div className="flex gap-2">
+                                    <button onClick={parseNaturalLanguage} disabled={nlLoading} className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
+                                        {nlLoading ? '🔄 Parsing...' : '✨ Parse Activity'}
                                     </button>
-                                    <button
-                                        onClick={() => { setShowRecommend(false); setRecommendations([]); }}
-                                        className="px-4 py-2 bg-gray-200 rounded-lg"
-                                    >
-                                        Cancel
-                                    </button>
+                                    <button onClick={() => { setShowNL(false); setNlText(''); }} className="px-4 py-2 bg-gray-300 rounded-lg">Cancel</button>
                                 </div>
-
-                                {recommendations.length > 0 && (
-                                    <div className="bg-white rounded-lg p-4 max-h-96 overflow-y-auto">
-                                        <h4 className="font-bold mb-3 text-lg">Suggested Activities:</h4>
-                                        <div className="space-y-3">
-                                            {recommendations.map((rec, idx) => (
-                                                <div key={idx} className="border rounded-lg p-4 hover:bg-gray-50">
-                                                    <h5 className="font-bold text-purple-700 mb-1">{rec.title}</h5>
-                                                    <p className="text-sm text-gray-600 mb-2">{rec.venue}</p>
-                                                    {rec.notes && <p className="text-sm text-gray-500 mb-2">{rec.notes}</p>}
-                                                    <div className="flex gap-2 text-xs text-gray-500 mb-3">
-                                                        {rec.duration && <span>⏱️ {rec.duration} min</span>}
-                                                        {rec.bestTime && <span>🕐 {rec.bestTime}</span>}
-                                                        {rec.ageAppropriate && <span>👶 {rec.ageAppropriate}</span>}
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {kids.map(kid => (
-                                                            <button
-                                                                key={kid.id}
-                                                                onClick={() => addRecommendedActivity(rec, kid.id)}
-                                                                className="px-3 py-1 text-xs rounded-full text-white"
-                                                                style={{ backgroundColor: kid.color }}
-                                                            >
-                                                                Add for {kid.name}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         )}
 
@@ -1139,5 +553,7 @@
 
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
+```
+
 </body>
 </html>
