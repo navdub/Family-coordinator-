@@ -10,10 +10,106 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    <nav>
-    <a href="index.html">Home</a>
-    <a href="family-scheduler.html">Family Scheduler</a>
-</nav>
+    <style>
+        /* Enhanced styling for the new UI */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        .page-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 0 0 1rem 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .action-btn-primary {
+            background: linear-gradient(135deg, #4facb0 0%, #3d9499 100%);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .action-btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(79, 172, 176, 0.3);
+        }
+        
+        .action-btn-ai {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .action-btn-ai:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(139, 92, 246, 0.3);
+        }
+        
+        .kid-tag-enhanced {
+            padding: 0.625rem 1.25rem;
+            border-radius: 1.5rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .activity-card-enhanced {
+            border-radius: 1rem;
+            padding: 1.25rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+        
+        .activity-card-enhanced:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+        
+        .bottom-nav-enhanced {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 1rem;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 0.75rem;
+            justify-content: center;
+            z-index: 50;
+        }
+        
+        .bottom-nav-btn {
+            padding: 0.875rem 1.25rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: none;
+            flex: 1;
+            max-width: 250px;
+        }
+        
+        @media (max-width: 768px) {
+            .bottom-nav-btn {
+                font-size: 0.875rem;
+                padding: 0.75rem 1rem;
+            }
+        }
+    </style>
 </head>
 <body>
     <div id="root"></div>
@@ -62,14 +158,14 @@
                         {!isNew ? (
                             <>
                                 <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="Family Code" className="w-full px-4 py-3 border rounded-lg mb-4 uppercase" />
-                                <button onClick={login} className="w-full bg-purple-600 text-white py-3 rounded-lg mb-3">Login</button>
-                                <button onClick={() => setIsNew(true)} className="text-purple-600">Create Family →</button>
+                                <button onClick={login} className="w-full bg-purple-600 text-white py-3 rounded-lg mb-3 hover:bg-purple-700 transition">Login</button>
+                                <button onClick={() => setIsNew(true)} className="text-purple-600 hover:underline">Create Family →</button>
                             </>
                         ) : (
                             <>
                                 <input value={name} onChange={e => setName(e.target.value)} placeholder="Family Name" className="w-full px-4 py-3 border rounded-lg mb-4" />
-                                <button onClick={create} className="w-full bg-green-600 text-white py-3 rounded-lg mb-3">Create</button>
-                                <button onClick={() => setIsNew(false)} className="text-gray-600">← Back</button>
+                                <button onClick={create} className="w-full bg-green-600 text-white py-3 rounded-lg mb-3 hover:bg-green-700 transition">Create</button>
+                                <button onClick={() => setIsNew(false)} className="text-gray-600 hover:underline">← Back</button>
                             </>
                         )}
                     </div>
@@ -118,102 +214,51 @@
 
             const logout = () => {
                 localStorage.clear();
-                setCode(null);
+                window.location.reload();
             };
 
             useEffect(() => {
-                if (!code) return setLoading(false);
-                
-                const unsub1 = db.collection('kids').where('familyCode', '==', code).onSnapshot(s => {
-                    setKids(s.docs.map(d => ({ id: d.id, ...d.data() })));
+                if (!code) return;
+                const unsub = db.collection('families').doc(code).collection('kids').onSnapshot(snap => {
+                    setKids(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                     setLoading(false);
                 });
-                
-                const unsub2 = db.collection('activities').where('familyCode', '==', code).onSnapshot(s => {
-                    setActs(s.docs.map(d => ({ id: d.id, ...d.data() })));
+                const unsub2 = db.collection('families').doc(code).collection('activities').onSnapshot(snap => {
+                    setActs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
-
-                const interval = setInterval(() => {
-                    const now = new Date();
-                    acts.forEach(a => {
-                        if (!a.notify || !a.time) return;
-                        const actTime = new Date(`${a.date}T${a.time}`);
-                        const diff = actTime - now;
-                        if (diff > 1740000 && diff < 1800000) {
-                            const kid = kids.find(k => k.id === a.kidId);
-                            if ('Notification' in window && Notification.permission === 'granted') {
-                                new Notification(`Upcoming: ${a.title}`, {
-                                    body: `${kid?.name} - ${a.type} in 30 min at ${a.location}`
-                                });
-                            }
-                        }
-                    });
-                }, 60000);
-
-                return () => { unsub1(); unsub2(); clearInterval(interval); };
-            }, [code, acts, kids]);
+                return () => { unsub(); unsub2(); };
+            }, [code]);
 
             const addKid = async () => {
                 if (!newKid.name) return;
-                await db.collection('kids').add({ ...newKid, familyCode: code });
-                setNewKid({ name: '', color: '#4ECDC4' });
+                await db.collection('families').doc(code).collection('kids').add(newKid);
+                setNewKid({ name: '', color: colors[Math.floor(Math.random() * colors.length)] });
                 setShowKid(false);
             };
 
-            const delKid = async (id) => {
-                const kid = kids.find(k => k.id === id);
-                const kidActs = acts.filter(a => a.kidId === id);
-                if (!confirm(`Delete ${kid?.name}? This will also delete ${kidActs.length} activities.`)) return;
-                await db.collection('kids').doc(id).delete();
-                const snap = await db.collection('activities').where('kidId', '==', id).get();
-                snap.forEach(d => d.ref.delete());
-            };
-
-            const getSuggestedPrepTasks = async (title) => {
-                if (!title || title.length < 3) return;
-                setLoadingPrepTasks(true);
-                try {
-                    const response = await fetch('/api/suggest-prep-tasks', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ activityTitle: title })
-                    });
-                    if (response.ok) {
-                        const data = await response.json();
-                        setSuggestedPrepTasks(data.tasks || []);
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                }
-                setLoadingPrepTasks(false);
+            const delKid = async id => {
+                if (!confirm('Delete kid?')) return;
+                await db.collection('families').doc(code).collection('kids').doc(id).delete();
             };
 
             const addAct = async () => {
-                if (!newAct.title || !newAct.kidId || !newAct.date) return;
-
+                if (!newAct.kidId || !newAct.title || !newAct.date || !newAct.time) return;
+                const actData = { ...newAct, createdAt: new Date() };
                 if (newAct.recurring !== 'none') {
-                    const startDate = new Date(newAct.date);
-                    const interval = newAct.recurring === 'daily' ? 1 : newAct.recurring === 'weekly' ? 7 : 14;
-                    const count = newAct.recurring === 'daily' ? 30 : 12;
-
-                    for (let i = 0; i < count; i++) {
-                        const d = new Date(startDate);
-                        d.setDate(d.getDate() + (interval * i));
-                        await db.collection('activities').add({
-                            ...newAct,
-                            date: d.toISOString().split('T')[0],
-                            familyCode: code,
-                            recurringId: Date.now()
-                        });
+                    const dates = [];
+                    const start = new Date(newAct.date);
+                    const increment = { daily: 1, weekly: 7, biweekly: 14 }[newAct.recurring] || 0;
+                    for (let i = 0; i < 12; i++) {
+                        const d = new Date(start);
+                        d.setDate(d.getDate() + i * increment);
+                        dates.push(d.toISOString().split('T')[0]);
+                    }
+                    for (const date of dates) {
+                        await db.collection('families').doc(code).collection('activities').add({ ...actData, date });
                     }
                 } else {
-                    await db.collection('activities').add({ ...newAct, familyCode: code });
+                    await db.collection('families').doc(code).collection('activities').add(actData);
                 }
-
-                if (newAct.notify && 'Notification' in window) {
-                    Notification.requestPermission();
-                }
-
                 setNewAct({ 
                     kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60,
                     type: 'Pick Up', notify: false, recurring: 'none', prepTasks: [], activityCategory: 'Physical', createdBy: 'Mom'
@@ -222,420 +267,535 @@
                 setShowAct(false);
             };
 
-            const delAct = async (id) => {
-                const a = acts.find(act => act.id === id);
-                const kid = kids.find(k => k.id === a?.kidId);
-                if (!confirm(`Delete ${a?.title} - ${kid?.name} on ${a?.date}?`)) return;
-                await db.collection('activities').doc(id).delete();
+            const delAct = async id => {
+                if (!confirm('Delete activity?')) return;
+                await db.collection('families').doc(code).collection('activities').doc(id).delete();
             };
 
-            const toggleActivityExpanded = (id) => {
-                setExpandedActivities(prev => ({ ...prev, [id]: !prev[id] }));
-            };
-
-            const getBalanceByCategory = () => {
-                const cats = {};
-                acts.forEach(a => {
-                    const cat = a.activityCategory || 'Other';
-                    if (!cats[cat]) cats[cat] = { total: 0, byKid: {} };
-                    cats[cat].total++;
-                    const kid = kids.find(k => k.id === a.kidId);
-                    if (kid) {
-                        cats[cat].byKid[kid.name] = (cats[cat].byKid[kid.name] || 0) + 1;
-                    }
-                });
-                return cats;
-            };
-
-            const getParentLoadBalance = () => {
-                const balance = { Mom: 0, Dad: 0, Both: 0 };
-                const created = { Mom: 0, Dad: 0 };
-                
-                acts.forEach(a => {
-                    balance[a.parent] = (balance[a.parent] || 0) + 1;
-                    if (a.createdBy) created[a.createdBy] = (created[a.createdBy] || 0) + 1;
-                });
-
-                return { balance, created };
+            const parseNL = async () => {
+                setNlLoading(true);
+                try {
+                    const res = await fetch('https://api.anthropic.com/v1/messages', {
+                        method: 'POST',
+                        headers: {
+                            'x-api-key': 'sk-ant-api03-1qjLRCAVK0xTNi8EhQ6IGIL5Qv0pWRMHbU-eViqNaXz-OPeT3bHvN0Fhp3kvgOTpuavuBEYB55pVzXCNx81VYw-BgTB5gAA',
+                            'anthropic-version': '2023-06-01',
+                            'content-type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            model: 'claude-3-5-sonnet-20241022',
+                            max_tokens: 1024,
+                            messages: [{
+                                role: 'user',
+                                content: `Parse this into JSON with fields: title, date (YYYY-MM-DD), time (HH:MM), location, parent, type (Pick Up/Drop Off/Other), activityCategory (Physical/Social/Creative/Academic/Other), prepTasks (array): "${nlText}". Kids: ${kids.map(k => k.name).join(', ')}. Today: ${new Date().toISOString().split('T')[0]}`
+                            }]
+                        })
+                    });
+                    const data = await res.json();
+                    const parsed = JSON.parse(data.content[0].text);
+                    const kid = kids.find(k => nlText.toLowerCase().includes(k.name.toLowerCase()));
+                    setNewAct({ ...newAct, ...parsed, kidId: kid?.id || '' });
+                    if (parsed.prepTasks) setSuggestedPrepTasks(parsed.prepTasks);
+                    setShowNL(false);
+                    setShowAct(true);
+                } catch (e) {
+                    alert('Error parsing: ' + e.message);
+                }
+                setNlLoading(false);
             };
 
             const getRecommendations = async () => {
-                if (!recLocation.trim()) return alert('Enter location');
                 setRecLoading(true);
-                setRecommendations([]);
                 try {
-                    const response = await fetch('/api/recommend-activities', {
+                    const res = await fetch('https://api.anthropic.com/v1/messages', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ location: recLocation, kids, preferences: recPreferences })
+                        headers: {
+                            'x-api-key': 'sk-ant-api03-1qjLRCAVK0xTNi8EhQ6IGIL5Qv0pWRMHbU-eViqNaXz-OPeT3bHvN0Fhp3kvgOTpuavuBEYB55pVzXCNx81VYw-BgTB5gAA',
+                            'anthropic-version': '2023-06-01',
+                            'content-type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            model: 'claude-3-5-sonnet-20241022',
+                            max_tokens: 2048,
+                            messages: [{
+                                role: 'user',
+                                content: `Suggest 5 family activities near ${recLocation}. Kids: ${kids.map(k => k.name).join(', ')}. Preferences: ${recPreferences}. Return JSON array with: title, description, location, estimatedDuration, ageAppropriate, category`
+                            }]
+                        })
                     });
-                    if (response.ok) {
-                        const data = await response.json();
-                        setRecommendations(data.recommendations || []);
-                    } else {
-                        const error = await response.json();
-                        alert('Error: ' + error.error);
-                    }
-                } catch (error) {
-                    alert('Error: ' + error.message);
+                    const data = await res.json();
+                    setRecommendations(JSON.parse(data.content[0].text));
+                } catch (e) {
+                    alert('Error: ' + e.message);
                 }
                 setRecLoading(false);
             };
 
-            const addRecommendedActivity = (rec, kidId) => {
-                setNewAct({
-                    kidId, title: rec.title, date: new Date().toISOString().split('T')[0], time: '', location: rec.venue || '',
-                    parent: 'Mom', notes: rec.notes || '', duration: rec.duration || 60, type: rec.type || 'Other',
-                    notify: false, recurring: 'none', prepTasks: [], activityCategory: rec.category || 'Physical', createdBy: 'Mom'
-                });
-                setShowRecommend(false);
-                setShowAct(true);
+            const suggestPrepTasks = async () => {
+                if (!newAct.title || !newAct.activityCategory) return;
+                setLoadingPrepTasks(true);
+                try {
+                    const res = await fetch('https://api.anthropic.com/v1/messages', {
+                        method: 'POST',
+                        headers: {
+                            'x-api-key': 'sk-ant-api03-1qjLRCAVK0xTNi8EhQ6IGIL5Qv0pWRMHbU-eViqNaXz-OPeT3bHvN0Fhp3kvgOTpuavuBEYB55pVzXCNx81VYw-BgTB5gAA',
+                            'anthropic-version': '2023-06-01',
+                            'content-type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            model: 'claude-3-5-sonnet-20241022',
+                            max_tokens: 512,
+                            messages: [{
+                                role: 'user',
+                                content: `Suggest 3-5 prep tasks for "${newAct.title}" (${newAct.activityCategory}). Return JSON array of strings.`
+                            }]
+                        })
+                    });
+                    const data = await res.json();
+                    setSuggestedPrepTasks(JSON.parse(data.content[0].text));
+                } catch (e) {
+                    console.error('Error suggesting prep tasks:', e);
+                }
+                setLoadingPrepTasks(false);
             };
 
+            const toggleGroupExpanded = (group) => {
+                setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }));
+            };
+
+            const toggleActivityExpanded = (actId) => {
+                setExpandedActivities(prev => ({ ...prev, [actId]: !prev[actId] }));
+            };
+
+            useEffect(() => {
+                if (newAct.title && newAct.activityCategory && showAct) {
+                    suggestPrepTasks();
+                }
+            }, [newAct.title, newAct.activityCategory]);
+
             if (!code) return <LoginScreen onLogin={handleLogin} />;
-            if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-xl">Loading...</div></div>;
+            if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
             const today = new Date().toISOString().split('T')[0];
-            const upcoming = acts.filter(a => a.date >= today).sort((a, b) => a.date.localeCompare(b.date));
-            const past = acts.filter(a => a.date < today).sort((a, b) => b.date.localeCompare(a.date));
-            const categoryBalance = getBalanceByCategory();
-            const parentLoad = getParentLoadBalance();
+            const upcoming = acts.filter(a => a.date >= today).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+            const past = acts.filter(a => a.date < today).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+
+            const groupActivities = (activities) => {
+                if (groupBy === 'kid') {
+                    const grouped = {};
+                    kids.forEach(kid => { grouped[kid.id] = activities.filter(a => a.kidId === kid.id); });
+                    return grouped;
+                } else if (groupBy === 'date') {
+                    const grouped = {};
+                    activities.forEach(a => {
+                        if (!grouped[a.date]) grouped[a.date] = [];
+                        grouped[a.date].push(a);
+                    });
+                    return grouped;
+                } else if (groupBy === 'parent') {
+                    const grouped = {};
+                    activities.forEach(a => {
+                        if (!grouped[a.parent]) grouped[a.parent] = [];
+                        grouped[a.parent].push(a);
+                    });
+                    return grouped;
+                }
+                return { all: activities };
+            };
+
+            const renderActivities = (activities) => {
+                if (groupBy === 'none') {
+                    return activities.map(a => renderActivity(a));
+                }
+                const grouped = groupActivities(activities);
+                return Object.entries(grouped).map(([group, acts]) => {
+                    if (acts.length === 0) return null;
+                    const isExpanded = expandedGroups[group] !== false;
+                    let groupLabel = group;
+                    if (groupBy === 'kid') {
+                        const kid = kids.find(k => k.id === group);
+                        groupLabel = kid ? kid.name : 'Unknown';
+                    }
+                    return (
+                        <div key={group} className="mb-4">
+                            <button onClick={() => toggleGroupExpanded(group)} className="w-full text-left font-bold text-lg mb-2 flex items-center gap-2 hover:bg-gray-50 p-2 rounded">
+                                <span>{isExpanded ? '▼' : '▶'}</span>
+                                <span>{groupLabel} ({acts.length})</span>
+                            </button>
+                            {isExpanded && <div className="space-y-3 ml-4">{acts.map(a => renderActivity(a))}</div>}
+                        </div>
+                    );
+                });
+            };
+
+            const renderActivity = (a) => {
+                const kid = kids.find(k => k.id === a.kidId);
+                const isExpanded = expandedActivities[a.id];
+                return (
+                    <div key={a.id} className="activity-card-enhanced border-l-4 shadow" style={{ borderLeftColor: kid?.color }}>
+                        <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 hover:text-gray-700">
+                                        {isExpanded ? '▼' : '▶'}
+                                    </button>
+                                    <div>
+                                        <h3 className="font-bold text-lg">
+                                            {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
+                                            {a.prepTasks?.length > 0 && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">+{a.prepTasks.length} tasks</span>}
+                                        </h3>
+                                        <p className="text-sm text-gray-600">{a.date} • {a.time} • {a.type} • {a.parent}</p>
+                                        
+                                        {isExpanded && (
+                                            <div className="mt-3 p-3 bg-gray-50 rounded text-sm">
+                                                <p><strong>📍 Location:</strong> {a.location || 'Not specified'}</p>
+                                                <p><strong>🏷️ Category:</strong> {a.activityCategory || 'Other'}</p>
+                                                <p><strong>👤 Created by:</strong> {a.createdBy || 'Unknown'}</p>
+                                                <p><strong>⏱️ Duration:</strong> {a.duration || 60} minutes</p>
+                                                {a.notes && <p className="mt-2"><strong>📝 Notes:</strong> {a.notes}</p>}
+                                                {a.prepTasks?.length > 0 && (
+                                                    <div className="mt-2">
+                                                        <p className="font-semibold mb-1">✅ Prep Tasks:</p>
+                                                        <ul className="list-disc ml-5">
+                                                            {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            <button onClick={() => delAct(a.id)} className="text-red-500 text-2xl ml-2 hover:text-red-700">×</button>
+                        </div>
+                    </div>
+                );
+            };
 
             return (
-                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
-                    <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h1 className="text-3xl font-bold">{name}</h1>
-                            <div className="flex gap-2">
-                                <button onClick={() => setShowCode(true)} className="px-4 py-2 bg-purple-100 rounded-lg">Share</button>
-                                <button onClick={logout} className="px-4 py-2 bg-gray-100 rounded-lg">Logout</button>
+                <div className="max-w-4xl mx-auto bg-white min-h-screen pb-24">
+                    {/* Enhanced Header */}
+                    <div className="page-header">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <div className="text-sm opacity-90 mb-1">family</div>
+                                <h1 className="text-3xl font-bold">Hello, {name} Family 👋</h1>
+                                <p className="text-sm opacity-90 mt-1">Here's what's happening this week</p>
+                            </div>
+                            <div className="flex gap-2 items-center">
+                                <button onClick={() => setShowCode(!showCode)} className="px-4 py-2 bg-white bg-opacity-20 rounded-lg hover:bg-opacity-30 transition">
+                                    Code: {code}
+                                </button>
+                                <button onClick={logout} className="px-4 py-2 bg-white bg-opacity-20 rounded-lg hover:bg-opacity-30 transition">
+                                    Logout
+                                </button>
                             </div>
                         </div>
+                    </div>
 
-                        {showCode && (
-                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                                <div className="bg-white rounded-2xl p-8 max-w-md">
-                                    <h2 className="text-2xl font-bold mb-4">Family Code</h2>
-                                    <div className="bg-purple-50 p-4 rounded-lg mb-4">
-                                        <p className="text-3xl font-mono text-center text-purple-600">{code}</p>
-                                    </div>
-                                    <button onClick={() => { navigator.clipboard.writeText(code); alert('Copied!'); }} className="w-full bg-purple-600 text-white py-3 rounded-lg mb-2">Copy</button>
-                                    <button onClick={() => setShowCode(false)} className="w-full bg-gray-200 py-3 rounded-lg">Close</button>
-                                </div>
-                            </div>
-                        )}
+                    <div className="px-4">
+                        {/* Action Buttons */}
+                        <div className="flex gap-3 mb-6">
+                            <button onClick={() => setShowAct(true)} className="action-btn-primary flex-1 flex items-center justify-center gap-2">
+                                ➕ Add Activity
+                            </button>
+                            <button onClick={() => setShowNL(true)} className="action-btn-ai flex-1 flex items-center justify-center gap-2">
+                                🤖 AI Suggest
+                            </button>
+                        </div>
 
-                        <div className="mb-6 p-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl shadow-lg">
-                            <div className="flex justify-between items-center mb-3">
-                                <div>
-                                    <h2 className="text-2xl font-bold text-white mb-1">✨ Quick Actions</h2>
-                                    <p className="text-blue-100 text-sm">Add, edit, or delete activities with natural language</p>
-                                </div>
-                                {!showNL && (
-                                    <button onClick={() => setShowNL(true)} className="px-6 py-3 bg-white text-blue-600 rounded-lg font-bold hover:bg-blue-50 transition shadow-md">
-                                        Start Typing
+                        {/* Main Navigation */}
+                        <div className="flex gap-2 mb-6 bg-gray-100 p-1 rounded-lg">
+                            <button onClick={() => setMainView('activities')} className={`flex-1 py-2 px-4 rounded-md transition ${mainView === 'activities' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}>
+                                Activities
+                            </button>
+                            <button onClick={() => setMainView('kids')} className={`flex-1 py-2 px-4 rounded-md transition ${mainView === 'kids' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}>
+                                Kids
+                            </button>
+                            <button onClick={() => setMainView('calendar')} className={`flex-1 py-2 px-4 rounded-md transition ${mainView === 'calendar' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}>
+                                Calendar
+                            </button>
+                        </div>
+
+                        {/* Kids Management View */}
+                        {mainView === 'kids' && (
+                            <div>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-2xl font-bold">Kids</h2>
+                                    <button onClick={() => setShowKid(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">
+                                        + Add Kid
                                     </button>
-                                )}
-                            </div>
-                            
-                            {showNL && (
-                                <div className="bg-white rounded-lg p-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
-                                        <div className="bg-green-50 p-2 rounded">
-                                            <p className="font-semibold text-xs text-green-800 mb-1">➕ ADD</p>
-                                            <p className="text-xs text-gray-600">"Emma soccer Tuesday 4pm"</p>
-                                        </div>
-                                        <div className="bg-blue-50 p-2 rounded">
-                                            <p className="font-semibold text-xs text-blue-800 mb-1">✏️ EDIT</p>
-                                            <p className="text-xs text-gray-600">"change Emma soccer to 5pm"</p>
-                                        </div>
-                                        <div className="bg-red-50 p-2 rounded">
-                                            <p className="font-semibold text-xs text-red-800 mb-1">🗑️ DELETE</p>
-                                            <p className="text-xs text-gray-600">"delete Emma soccer Tuesday"</p>
-                                        </div>
-                                    </div>
-                                    <textarea value={nlText} onChange={e => setNlText(e.target.value)} placeholder="Type what you want to do..." className="w-full px-4 py-3 border-2 border-blue-200 rounded-lg mb-3" rows="2" autoFocus />
-                                    <div className="flex gap-2">
-                                        <button onClick={() => alert('NL parsing - see previous version')} disabled={nlLoading} className="px-6 py-2 bg-blue-600 text-white rounded-lg">
-                                            {nlLoading ? '🔄 Processing...' : '✨ Execute'}
-                                        </button>
-                                        <button onClick={() => { setShowNL(false); setNlText(''); }} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="mb-8">
-                            <div className="flex justify-between mb-4">
-                                <h2 className="text-xl font-bold">Kids</h2>
-                                <button onClick={() => setShowKid(true)} className="px-4 py-2 bg-blue-500 text-white rounded-lg">+ Add</button>
-                            </div>
-                            <div className="flex gap-3 flex-wrap">
-                                {kids.map(k => (
-                                    <div key={k.id} className="flex items-center gap-2 px-4 py-2 rounded-full shadow-md" style={{ backgroundColor: k.color + '30' }}>
-                                        <span style={{ color: k.color }}>{k.name}</span>
-                                        <button onClick={() => delKid(k.id)} className="text-red-500">×</button>
-                                    </div>
-                                ))}
-                            </div>
-                            {showKid && (
-                                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                                    <input value={newKid.name} onChange={e => setNewKid({ ...newKid, name: e.target.value })} placeholder="Name" className="w-full px-4 py-2 border rounded mb-3" />
-                                    <div className="flex gap-2 mb-3">
-                                        {colors.map(c => (
-                                            <button key={c} onClick={() => setNewKid({ ...newKid, color: c })} className="w-8 h-8 rounded-full" style={{ backgroundColor: c, border: newKid.color === c ? '2px solid black' : 'none' }} />
-                                        ))}
-                                    </div>
-                                    <button onClick={addKid} className="px-4 py-2 bg-blue-500 text-white rounded mr-2">Add</button>
-                                    <button onClick={() => setShowKid(false)} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex gap-2 mb-4">
-                            <button onClick={() => setMainView('activities')} className={`px-4 py-2 rounded-lg ${mainView === 'activities' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Activities</button>
-                            <button onClick={() => setMainView('balance')} className={`px-4 py-2 rounded-lg ${mainView === 'balance' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Balance Dashboard</button>
-                        </div>
-
-                        {mainView === 'balance' ? (
-                            <div className="space-y-6">
-                                <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg">
-                                    <h3 className="text-2xl font-bold mb-4">📊 Parent Load Balance</h3>
-                                    <div className="space-y-4">
-                                        <div>
-                                            <p className="text-sm font-semibold mb-2">Activities Created:</p>
-                                            <div className="flex gap-4">
-                                                <div>Mom: <span className="font-bold text-2xl">{parentLoad.created.Mom || 0}</span></div>
-                                                <div>Dad: <span className="font-bold text-2xl">{parentLoad.created.Dad || 0}</span></div>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-semibold mb-2">Activities Assigned:</p>
-                                            <div className="flex gap-4">
-                                                <div>Mom: <span className="font-bold text-2xl">{parentLoad.balance.Mom || 0}</span></div>
-                                                <div>Dad: <span className="font-bold text-2xl">{parentLoad.balance.Dad || 0}</span></div>
-                                                <div>Both: <span className="font-bold text-2xl">{parentLoad.balance.Both || 0}</span></div>
-                                            </div>
-                                        </div>
-                                        {parentLoad.created.Mom > 0 || parentLoad.created.Dad > 0 ? (
-                                            <div className="mt-4 p-4 bg-white rounded-lg">
-                                                <p className="text-sm">
-                                                    {parentLoad.created.Mom > parentLoad.created.Dad * 2 ? 
-                                                        '💡 Dad: Help balance the mental load by creating more activities!' :
-                                                        parentLoad.created.Dad > parentLoad.created.Mom * 2 ?
-                                                        '💡 Mom: Help balance the mental load by creating more activities!' :
-                                                        '✅ Great balance on activity creation!'}
-                                                </p>
-                                            </div>
-                                        ) : null}
-                                    </div>
                                 </div>
 
-                                <div className="bg-gradient-to-r from-blue-50 to-cyan-50 p-6 rounded-lg">
-                                    <h3 className="text-2xl font-bold mb-4">🎯 Activity Balance by Category</h3>
-                                    {Object.keys(categoryBalance).length === 0 ? (
-                                        <p className="text-gray-500">No activities yet</p>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            {Object.entries(categoryBalance).map(([cat, data]) => (
-                                                <div key={cat} className="bg-white p-4 rounded-lg">
-                                                    <h4 className="font-bold text-lg mb-2">{cat}</h4>
-                                                    <p className="text-sm text-gray-600 mb-2">Total: {data.total}</p>
-                                                    <div className="flex gap-4">
-                                                        {Object.entries(data.byKid).map(([kidName, count]) => (
-                                                            <div key={kidName} className="text-sm">
-                                                                {kidName}: <span className="font-bold">{count}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
+                                {showKid && (
+                                    <div className="mb-4 p-4 border rounded-lg bg-gray-50">
+                                        <h3 className="font-bold mb-3">Add New Kid</h3>
+                                        <input value={newKid.name} onChange={e => setNewKid({ ...newKid, name: e.target.value })} placeholder="Kid's Name" className="w-full px-4 py-2 border rounded mb-3" />
+                                        <div className="flex gap-2 mb-3">
+                                            {colors.map(c => (
+                                                <button key={c} onClick={() => setNewKid({ ...newKid, color: c })} className="w-8 h-8 rounded-full" style={{ backgroundColor: c, border: newKid.color === c ? '3px solid black' : 'none' }}></button>
                                             ))}
                                         </div>
-                                    )}
-                                </div>
-                            </div>
-                        ) : (
-                            <div>
-                                <div className="flex justify-between mb-4 flex-wrap gap-2">
-                                    <h2 className="text-xl font-bold">Activities</h2>
-                                    <div className="flex gap-2 flex-wrap">
-                                        {view === 'list' && (
-                                            <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 border rounded bg-white">
-                                                <option value="none">No Grouping</option>
-                                                <option value="title">Group by Activity</option>
-                                                <option value="kid">Group by Kid</option>
-                                                <option value="type">Group by Type</option>
-                                                <option value="parent">Group by Parent</option>
-                                            </select>
-                                        )}
-                                        <button onClick={() => setView('list')} className={`px-3 py-2 rounded ${view === 'list' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>List</button>
-                                        <button onClick={() => setView('calendar')} className={`px-3 py-2 rounded ${view === 'calendar' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Calendar</button>
-                                        <button onClick={() => setShowRecommend(true)} className="px-4 py-2 bg-purple-500 text-white rounded-lg">🤖 AI Suggest</button>
-                                        <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add</button>
-                                    </div>
-                                </div>
-
-                                {showRecommend && (
-                                    <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border-2 border-purple-200">
-                                        <h3 className="font-bold text-xl mb-3 text-purple-800">🤖 AI Activity Recommendations</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                                            <input type="text" value={recLocation} onChange={e => setRecLocation(e.target.value)} placeholder="Location (e.g., Seattle, WA)" className="px-4 py-2 border rounded-lg" />
-                                            <input type="text" value={recPreferences} onChange={e => setRecPreferences(e.target.value)} placeholder="Preferences (optional)" className="px-4 py-2 border rounded-lg" />
-                                        </div>
-                                        <div className="flex gap-2 mb-4">
-                                            <button onClick={getRecommendations} disabled={recLoading} className="px-6 py-2 bg-purple-600 text-white rounded-lg">
-                                                {recLoading ? '🔄 Getting...' : '🤖 Get Recommendations'}
-                                            </button>
-                                            <button onClick={() => { setShowRecommend(false); setRecommendations([]); }} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
-                                        </div>
-
-                                        {recommendations.length > 0 && (
-                                            <div className="bg-white rounded-lg p-4 max-h-96 overflow-y-auto">
-                                                <h4 className="font-bold mb-3 text-lg">Suggested Activities:</h4>
-                                                <div className="space-y-3">
-                                                    {recommendations.map((rec, idx) => (
-                                                        <div key={idx} className="border rounded-lg p-4">
-                                                            <h5 className="font-bold text-purple-700 mb-1">{rec.title}</h5>
-                                                            <p className="text-sm text-gray-600 mb-1">{rec.venue}</p>
-                                                            {rec.websiteUrl && <a href={rec.websiteUrl} target="_blank" className="text-xs text-blue-600 hover:underline">🔗 Visit Website</a>}
-                                                            {rec.notes && <p className="text-sm text-gray-500 mb-2">{rec.notes}</p>}
-                                                            <div className="flex flex-wrap gap-2 mt-2">
-                                                                {kids.map(kid => (
-                                                                    <button key={kid.id} onClick={() => addRecommendedActivity(rec, kid.id)} className="px-3 py-1 text-xs rounded-full text-white" style={{ backgroundColor: kid.color }}>
-                                                                        Add for {kid.name}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {showAct && (
-                                    <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <select value={newAct.kidId} onChange={e => setNewAct({ ...newAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option value="">Select Kid</option>
-                                                {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
-                                            </select>
-                                            <input value={newAct.title} onChange={e => { setNewAct({ ...newAct, title: e.target.value }); getSuggestedPrepTasks(e.target.value); }} placeholder="Activity" className="px-4 py-2 border rounded" />
-                                            <input type="date" value={newAct.date} onChange={e => setNewAct({ ...newAct, date: e.target.value })} className="px-4 py-2 border rounded" />
-                                            <input type="time" value={newAct.time} onChange={e => setNewAct({ ...newAct, time: e.target.value })} className="px-4 py-2 border rounded" />
-                                            <input value={newAct.location} onChange={e => setNewAct({ ...newAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
-                                            <select value={newAct.parent} onChange={e => setNewAct({ ...newAct, parent: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option>Mom</option>
-                                                <option>Dad</option>
-                                                <option>Both</option>
-                                            </select>
-                                            <select value={newAct.type} onChange={e => setNewAct({ ...newAct, type: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option>Pick Up</option>
-                                                <option>Drop Off</option>
-                                                <option>Other</option>
-                                            </select>
-                                            <select value={newAct.activityCategory} onChange={e => setNewAct({ ...newAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option>Physical</option>
-                                                <option>Social</option>
-                                                <option>Creative</option>
-                                                <option>Academic</option>
-                                                <option>Other</option>
-                                            </select>
-                                            <select value={newAct.createdBy} onChange={e => setNewAct({ ...newAct, createdBy: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option>Mom</option>
-                                                <option>Dad</option>
-                                            </select>
-                                            <select value={newAct.recurring} onChange={e => setNewAct({ ...newAct, recurring: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option value="none">One-time</option>
-                                                <option value="daily">Daily</option>
-                                                <option value="weekly">Weekly</option>
-                                                <option value="biweekly">Bi-weekly</option>
-                                            </select>
-                                        </div>
-                                        
-                                        {loadingPrepTasks && <p className="text-sm text-gray-500 mt-3">AI suggesting prep tasks...</p>}
-                                        {suggestedPrepTasks.length > 0 && (
-                                            <div className="mt-3">
-                                                <p className="text-sm font-semibold mb-2">✨ AI Suggested Prep Tasks:</p>
-                                                <div className="space-y-1">
-                                                    {suggestedPrepTasks.map((task, idx) => (
-                                                        <label key={idx} className="flex items-center gap-2 text-sm">
-                                                            <input type="checkbox" checked={newAct.prepTasks.includes(task)} onChange={e => {
-                                                                if (e.target.checked) {
-                                                                    setNewAct({ ...newAct, prepTasks: [...newAct.prepTasks, task] });
-                                                                } else {
-                                                                    setNewAct({ ...newAct, prepTasks: newAct.prepTasks.filter(t => t !== task) });
-                                                                }
-                                                            }} />
-                                                            {task}
-                                                        </label>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        <label className="flex items-center gap-2 mt-3">
-                                            <input type="checkbox" checked={newAct.notify} onChange={e => setNewAct({ ...newAct, notify: e.target.checked })} />
-                                            <span className="text-sm">🔔 Notify 30 min before</span>
-                                        </label>
-                                        
-                                        <textarea value={newAct.notes} onChange={e => setNewAct({ ...newAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded mt-3" rows="2"></textarea>
-                                        
-                                        <div className="flex gap-2 mt-3">
-                                            <button onClick={addAct} className="px-4 py-2 bg-green-500 text-white rounded">Add</button>
-                                            <button onClick={() => { setShowAct(false); setSuggestedPrepTasks([]); }} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                                        <div className="flex gap-2">
+                                            <button onClick={addKid} className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">Add</button>
+                                            <button onClick={() => setShowKid(false)} className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Cancel</button>
                                         </div>
                                     </div>
                                 )}
 
                                 <div className="space-y-3">
-                                    {upcoming.length === 0 ? <p className="text-gray-500 text-center py-4">No upcoming activities</p> : upcoming.map(a => {
-                                        const kid = kids.find(k => k.id === a.kidId);
-                                        const isExpanded = expandedActivities[a.id];
-                                        return (
-                                            <div key={a.id} className="p-4 border-l-4 rounded shadow bg-white" style={{ borderLeftColor: kid?.color }}>
-                                                <div className="flex justify-between items-start">
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 hover:text-gray-700">
-                                                                {isExpanded ? '▼' : '▶'}
-                                                            </button>
-                                                            <div>
-                                                                <h3 className="font-bold">
-                                                                    {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
-                                                                    {a.prepTasks?.length > 0 && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">+{a.prepTasks.length} tasks</span>}
-                                                                </h3>
-                                                                <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent}</p>
-                                                                
-                                                                {isExpanded && (
-                                                                    <div className="mt-2 p-3 bg-gray-50 rounded text-sm">
-                                                                        <p><strong>Location:</strong> {a.location || 'Not specified'}</p>
-                                                                        <p><strong>Category:</strong> {a.activityCategory || 'Other'}</p>
-                                                                        <p><strong>Created by:</strong> {a.createdBy || 'Unknown'}</p>
-                                                                        {a.notes && <p><strong>Notes:</strong> {a.notes}</p>}
-                                                                        {a.prepTasks?.length > 0 && (
-                                                                            <div className="mt-2">
-                                                                                <p className="font-semibold mb-1">Prep Tasks:</p>
-                                                                                <ul className="list-disc ml-5">
-                                                                                    {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
-                                                                                </ul>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
+                                    {kids.length === 0 ? (
+                                        <p className="text-gray-500 text-center py-8">No kids added yet. Click "Add Kid" to get started!</p>
+                                    ) : (
+                                        kids.map(k => (
+                                            <div key={k.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow transition" style={{ borderLeftWidth: '4px', borderLeftColor: k.color }}>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-2xl" style={{ backgroundColor: k.color + '40' }}>
+                                                        👶
                                                     </div>
-                                                    <button onClick={() => delAct(a.id)} className="text-red-500 text-xl ml-2">×</button>
+                                                    <span className="font-bold text-lg">{k.name}</span>
                                                 </div>
+                                                <button onClick={() => delKid(k.id)} className="text-red-500 text-2xl hover:text-red-700">×</button>
                                             </div>
-                                        );
-                                    })}
+                                        ))
+                                    )}
                                 </div>
                             </div>
                         )}
+
+                        {/* Calendar View */}
+                        {mainView === 'calendar' && (
+                            <div>
+                                <h2 className="text-2xl font-bold mb-4">Calendar View</h2>
+                                <div className="bg-gray-50 p-4 rounded-lg">
+                                    {upcoming.length === 0 ? (
+                                        <p className="text-gray-500 text-center py-8">No upcoming activities</p>
+                                    ) : (
+                                        (() => {
+                                            const byDate = {};
+                                            upcoming.forEach(a => {
+                                                if (!byDate[a.date]) byDate[a.date] = [];
+                                                byDate[a.date].push(a);
+                                            });
+                                            return Object.entries(byDate).map(([date, acts]) => (
+                                                <div key={date} className="mb-4">
+                                                    <h3 className="font-bold text-lg mb-2">{new Date(date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</h3>
+                                                    <div className="space-y-2 ml-4">
+                                                        {acts.map(a => {
+                                                            const kid = kids.find(k => k.id === a.kidId);
+                                                            return (
+                                                                <div key={a.id} className="p-3 bg-white rounded border-l-4" style={{ borderLeftColor: kid?.color }}>
+                                                                    <div className="flex justify-between">
+                                                                        <div>
+                                                                            <p className="font-semibold">{a.time} - {a.title}</p>
+                                                                            <p className="text-sm text-gray-600">{kid?.name} • {a.parent}</p>
+                                                                        </div>
+                                                                        <button onClick={() => delAct(a.id)} className="text-red-500 hover:text-red-700">×</button>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            ));
+                                        })()
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Activities View */}
+                        {mainView === 'activities' && (
+                            <div>
+                                {/* Kids Filter */}
+                                <div className="flex items-center gap-3 mb-6">
+                                    <h2 className="text-2xl font-bold">Kids</h2>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {kids.map(k => (
+                                            <button key={k.id} className="kid-tag-enhanced" style={{ backgroundColor: k.color + '40', color: k.color }}>
+                                                {k.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* View Controls */}
+                                <div className="flex gap-2 mb-4">
+                                    <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-4 py-2 border rounded-lg">
+                                        <option value="none">No Grouping</option>
+                                        <option value="kid">Group by Kid</option>
+                                        <option value="date">Group by Date</option>
+                                        <option value="parent">Group by Parent</option>
+                                    </select>
+                                    <button onClick={() => setShowPast(!showPast)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">
+                                        {showPast ? 'Hide Past' : 'Show Past'}
+                                    </button>
+                                </div>
+
+                                {/* Natural Language Input Modal */}
+                                {showNL && (
+                                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                                        <div className="bg-white rounded-2xl p-6 max-w-lg w-full">
+                                            <h3 className="font-bold text-xl mb-4">🤖 AI Activity Parser</h3>
+                                            <textarea value={nlText} onChange={e => setNlText(e.target.value)} placeholder="e.g., 'Soccer practice for DD1 tomorrow at 3pm at Central Park with Dad'" className="w-full px-4 py-3 border rounded-lg mb-4" rows="4"></textarea>
+                                            <div className="flex gap-2">
+                                                <button onClick={parseNL} disabled={nlLoading} className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition disabled:opacity-50">
+                                                    {nlLoading ? 'Parsing...' : 'Parse & Add'}
+                                                </button>
+                                                <button onClick={() => { setShowNL(false); setNlText(''); }} className="px-6 py-2 bg-gray-300 rounded-lg hover:bg-gray-400 transition">
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Add Activity Modal */}
+                                {showAct && (
+                                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+                                        <div className="bg-white rounded-2xl p-6 max-w-2xl w-full my-8">
+                                            <h3 className="font-bold text-xl mb-4">Add New Activity</h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <select value={newAct.kidId} onChange={e => setNewAct({ ...newAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
+                                                    <option value="">Select Kid</option>
+                                                    {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+                                                </select>
+                                                <input value={newAct.title} onChange={e => setNewAct({ ...newAct, title: e.target.value })} placeholder="Activity Title" className="px-4 py-2 border rounded" />
+                                                <input type="date" value={newAct.date} onChange={e => setNewAct({ ...newAct, date: e.target.value })} className="px-4 py-2 border rounded" />
+                                                <input type="time" value={newAct.time} onChange={e => setNewAct({ ...newAct, time: e.target.value })} className="px-4 py-2 border rounded" />
+                                                <input value={newAct.location} onChange={e => setNewAct({ ...newAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
+                                                <select value={newAct.parent} onChange={e => setNewAct({ ...newAct, parent: e.target.value })} className="px-4 py-2 border rounded">
+                                                    <option>Mom</option>
+                                                    <option>Dad</option>
+                                                </select>
+                                                <select value={newAct.type} onChange={e => setNewAct({ ...newAct, type: e.target.value })} className="px-4 py-2 border rounded">
+                                                    <option>Pick Up</option>
+                                                    <option>Drop Off</option>
+                                                    <option>Other</option>
+                                                </select>
+                                                <select value={newAct.activityCategory} onChange={e => setNewAct({ ...newAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
+                                                    <option>Physical</option>
+                                                    <option>Social</option>
+                                                    <option>Creative</option>
+                                                    <option>Academic</option>
+                                                    <option>Other</option>
+                                                </select>
+                                                <select value={newAct.createdBy} onChange={e => setNewAct({ ...newAct, createdBy: e.target.value })} className="px-4 py-2 border rounded">
+                                                    <option>Mom</option>
+                                                    <option>Dad</option>
+                                                </select>
+                                                <select value={newAct.recurring} onChange={e => setNewAct({ ...newAct, recurring: e.target.value })} className="px-4 py-2 border rounded">
+                                                    <option value="none">One-time</option>
+                                                    <option value="daily">Daily</option>
+                                                    <option value="weekly">Weekly</option>
+                                                    <option value="biweekly">Bi-weekly</option>
+                                                </select>
+                                            </div>
+                                            
+                                            {loadingPrepTasks && <p className="text-sm text-gray-500 mt-3">AI suggesting prep tasks...</p>}
+                                            {suggestedPrepTasks.length > 0 && (
+                                                <div className="mt-3">
+                                                    <p className="text-sm font-semibold mb-2">✨ AI Suggested Prep Tasks:</p>
+                                                    <div className="space-y-1">
+                                                        {suggestedPrepTasks.map((task, idx) => (
+                                                            <label key={idx} className="flex items-center gap-2 text-sm">
+                                                                <input type="checkbox" checked={newAct.prepTasks.includes(task)} onChange={e => {
+                                                                    if (e.target.checked) {
+                                                                        setNewAct({ ...newAct, prepTasks: [...newAct.prepTasks, task] });
+                                                                    } else {
+                                                                        setNewAct({ ...newAct, prepTasks: newAct.prepTasks.filter(t => t !== task) });
+                                                                    }
+                                                                }} />
+                                                                {task}
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <label className="flex items-center gap-2 mt-3">
+                                                <input type="checkbox" checked={newAct.notify} onChange={e => setNewAct({ ...newAct, notify: e.target.checked })} />
+                                                <span className="text-sm">🔔 Notify 30 min before</span>
+                                            </label>
+                                            
+                                            <textarea value={newAct.notes} onChange={e => setNewAct({ ...newAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded mt-3" rows="2"></textarea>
+                                            
+                                            <div className="flex gap-2 mt-4">
+                                                <button onClick={addAct} className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">Add Activity</button>
+                                                <button onClick={() => { setShowAct(false); setSuggestedPrepTasks([]); }} className="px-6 py-2 bg-gray-300 rounded-lg hover:bg-gray-400 transition">Cancel</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Activities List */}
+                                <div className="space-y-4">
+                                    <h3 className="text-xl font-bold">Upcoming Activities</h3>
+                                    {upcoming.length === 0 ? (
+                                        <p className="text-gray-500 text-center py-8">No upcoming activities. Click "Add Activity" to get started!</p>
+                                    ) : (
+                                        renderActivities(upcoming)
+                                    )}
+                                </div>
+
+                                {/* Past Activities */}
+                                {showPast && past.length > 0 && (
+                                    <div className="space-y-4 mt-8">
+                                        <h3 className="text-xl font-bold">Past Activities</h3>
+                                        {renderActivities(past)}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
+
+                    {/* Enhanced Bottom Navigation */}
+                    <div className="bottom-nav-enhanced">
+                        <button onClick={() => setShowAct(true)} className="bottom-nav-btn action-btn-primary">
+                            ➕ Add Activity
+                        </button>
+                        <button onClick={() => setShowNL(true)} className="bottom-nav-btn action-btn-ai">
+                            😊 AI Suggest
+                        </button>
+                        <button onClick={() => setShowRecommend(true)} className="bottom-nav-btn bg-gray-100 hover:bg-gray-200">
+                            📅 Recommendations
+                        </button>
+                    </div>
+
+                    {/* Recommendations Modal */}
+                    {showRecommend && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                                <h3 className="font-bold text-xl mb-4">🎯 Activity Recommendations</h3>
+                                <input value={recLocation} onChange={e => setRecLocation(e.target.value)} placeholder="Location (e.g., Seattle, WA)" className="w-full px-4 py-2 border rounded mb-3" />
+                                <textarea value={recPreferences} onChange={e => setRecPreferences(e.target.value)} placeholder="Preferences (e.g., outdoor, educational, budget-friendly)" className="w-full px-4 py-2 border rounded mb-3" rows="2"></textarea>
+                                <button onClick={getRecommendations} disabled={recLoading} className="w-full px-6 py-2 bg-purple-600 text-white rounded-lg mb-4 hover:bg-purple-700 transition disabled:opacity-50">
+                                    {recLoading ? 'Getting Recommendations...' : 'Get Recommendations'}
+                                </button>
+                                
+                                {recommendations.length > 0 && (
+                                    <div className="space-y-3">
+                                        {recommendations.map((rec, idx) => (
+                                            <div key={idx} className="p-4 border rounded-lg hover:shadow transition">
+                                                <h4 className="font-bold text-lg">{rec.title}</h4>
+                                                <p className="text-sm text-gray-600 mt-1">{rec.description}</p>
+                                                <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                                                    <span>📍 {rec.location}</span>
+                                                    <span>⏱️ {rec.estimatedDuration}</span>
+                                                    <span>👶 {rec.ageAppropriate}</span>
+                                                    <span>🏷️ {rec.category}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                
+                                <button onClick={() => { setShowRecommend(false); setRecommendations([]); }} className="w-full px-6 py-2 bg-gray-300 rounded-lg mt-4 hover:bg-gray-400 transition">
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
