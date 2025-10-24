@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Activity Scheduler</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            min-height: 100vh;
+        }
+
+        /* Header Section */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 30px;
+        }
+
+        .header-content h1 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #1a1a1a;
+        }
+
+        .header-content .page-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .header-content .subtitle {
+            font-size: 1.1rem;
+            color: #666;
+            font-weight: 400;
+        }
+
+        .user-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5rem;
+        }
+
+        .user-avatar img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 40px;
+        }
+
+        .btn-primary {
+            flex: 1;
+            padding: 18px 30px;
+            border: none;
+            border-radius: 16px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-add {
+            background: linear-gradient(135deg, #4facb0 0%, #3d9499 100%);
+            color: white;
+        }
+
+        .btn-add:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(79, 172, 176, 0.3);
+        }
+
+        .btn-ai {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+        }
+
+        .btn-ai:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(139, 92, 246, 0.3);
+        }
+
+        /* Filter Section */
+        .filter-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .filter-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .filter-left h2 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #1a1a1a;
+        }
+
+        .kid-filters {
+            display: flex;
+            gap: 10px;
+        }
+
+        .kid-tag {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .kid-tag.dd1 {
+            background-color: #e0f2f1;
+            color: #00796b;
+        }
+
+        .kid-tag.dd1:hover,
+        .kid-tag.dd1.active {
+            background-color: #b2dfdb;
+        }
+
+        .kid-tag.dd2 {
+            background-color: #ede7f6;
+            color: #5e35b1;
+        }
+
+        .kid-tag.dd2:hover,
+        .kid-tag.dd2.active {
+            background-color: #d1c4e9;
+        }
+
+        .time-filter {
+            padding: 10px 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            background-color: white;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        /* Activity List */
+        .activity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 100px;
+        }
+
+        .activity-card {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            border-radius: 16px;
+            transition: all 0.3s ease;
+            gap: 15px;
+        }
+
+        .activity-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .activity-card.dd1-activity {
+            background-color: #e0f2f1;
+        }
+
+        .activity-card.dd2-activity {
+            background-color: #ede7f6;
+        }
+
+        .activity-icon {
+            font-size: 2.5rem;
+            min-width: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .activity-details {
+            flex: 1;
+        }
+
+        .activity-details h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #1a1a1a;
+        }
+
+        .activity-meta {
+            font-size: 1rem;
+            color: #666;
+            font-weight: 400;
+        }
+
+        .activity-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-icon {
+            width: 40px;
+            height: 40px;
+            border: none;
+            background-color: rgba(255, 255, 255, 0.5);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .btn-icon:hover {
+            background-color: rgba(255, 255, 255, 0.9);
+            transform: scale(1.1);
+        }
+
+        .notification-badge {
+            width: 40px;
+            height: 40px;
+            border: none;
+            background-color: rgba(255, 255, 255, 0.5);
+            border-radius: 8px;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Bottom Navigation */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: white;
+            padding: 15px 20px;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .btn-bottom {
+            flex: 1;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            max-width: 250px;
+        }
+
+        .btn-bottom.add {
+            background: linear-gradient(135deg, #4facb0 0%, #3d9499 100%);
+            color: white;
+        }
+
+        .btn-bottom.ai {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+        }
+
+        .btn-bottom.calendar {
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .btn-bottom:hover {
+            transform: translateY(-2px);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+
+            .header-content h1 {
+                font-size: 2rem;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+
+            .filter-section {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            .filter-left {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .btn-bottom {
+                font-size: 0.9rem;
+                padding: 12px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header Section -->
+        <header class="header">
+            <div class="header-content">
+                <div class="page-title">family</div>
+                <h1>Hello, Dubey Family 👋</h1>
+                <p class="subtitle">Here's what's happening this week</p>
+            </div>
+            <div class="user-avatar">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%234facb0'/%3E%3Ctext x='50' y='65' font-size='40' text-anchor='middle' fill='white' font-family='Arial'%3E👤%3C/text%3E%3C/svg%3E" alt="User Avatar">
+            </div>
+        </header>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+            <button class="btn-primary btn-add">➕ Add Activity</button>
+            <button class="btn-primary btn-ai">🤖 AI Suggest</button>
+        </div>
+
+        <!-- Filter Section -->
+        <div class="filter-section">
+            <div class="filter-left">
+                <h2>Kids</h2>
+                <div class="kid-filters">
+                    <button class="kid-tag dd1 active">🧠 DD1</button>
+                    <button class="kid-tag dd2">🏊 DD2</button>
+                </div>
+            </div>
+            <div class="filter-right">
+                <select class="time-filter">
+                    <option>This Week ▼</option>
+                    <option>Next Week</option>
+                    <option>This Month</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Activity List -->
+        <div class="activity-list">
+            <!-- Activity Card 1 -->
+            <div class="activity-card dd1-activity">
+                <div class="activity-icon">♟️</div>
+                <div class="activity-details">
+                    <h3>Chess – DD1</h3>
+                    <p class="activity-meta">Fri, Oct 24 • 5:00 PM • Dad</p>
+                </div>
+                <div class="activity-actions">
+                    <button class="btn-icon">✏️</button>
+                    <button class="btn-icon">❌</button>
+                </div>
+            </div>
+
+            <!-- Activity Card 2 -->
+            <div class="activity-card dd2-activity">
+                <div class="activity-icon">🏊</div>
+                <div class="activity-details">
+                    <h3>Swim – DD2</h3>
+                    <p class="activity-meta">Fri, Oct 24 • Drop Off • Mom</p>
+                </div>
+                <div class="activity-actions">
+                    <div class="notification-badge">🔔</div>
+                    <div class="notification-badge">💡</div>
+                </div>
+            </div>
+
+            <!-- Activity Card 3 -->
+            <div class="activity-card dd1-activity">
+                <div class="activity-icon">♟️</div>
+                <div class="activity-details">
+                    <h3>Chess – DD1</h3>
+                    <p class="activity-meta">Fri, Oct 31 • 5:00 PM • Dad</p>
+                </div>
+                <div class="activity-actions">
+                    <button class="btn-icon">✏️</button>
+                    <button class="btn-icon">✏️</button>
+                </div>
+            </div>
+
+            <!-- Activity Card 4 -->
+            <div class="activity-card dd2-activity">
+                <div class="activity-icon">🔔</div>
+                <div class="activity-details">
+                    <h3>Swim – DD2</h3>
+                    <p class="activity-meta">Fri, Oct 31 • 5:00PM • Dad</p>
+                </div>
+                <div class="activity-actions">
+                    <div class="notification-badge">⏰</div>
+                    <div class="notification-badge">🏊</div>
+                    <div class="notification-badge" style="background-color: #4facb0; color: white; border-radius: 50%;">📍</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav">
+            <button class="btn-bottom add">➕ Add Activity</button>
+            <button class="btn-bottom ai">😊 AI Suggest</button>
+            <button class="btn-bottom calendar">Calendar View</button>
+        </nav>
+    </div>
+
+    <script>
+        // Toggle kid filter
+        document.querySelectorAll('.kid-tag').forEach(tag => {
+            tag.addEventListener('click', function() {
+                document.querySelectorAll('.kid-tag').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Add Activity button functionality
+        document.querySelectorAll('.btn-add, .btn-bottom.add').forEach(btn => {
+            btn.addEventListener('click', function() {
+                alert('Add Activity feature coming soon!');
+            });
+        });
+
+        // AI Suggest button functionality
+        document.querySelectorAll('.btn-ai, .btn-bottom.ai').forEach(btn => {
+            btn.addEventListener('click', function() {
+                alert('AI Suggest feature coming soon!');
+            });
+        });
+
+        // Calendar View button functionality
+        document.querySelector('.btn-bottom.calendar').addEventListener('click', function() {
+            alert('Calendar View feature coming soon!');
+        });
+    </script>
+</body>
+</html>
