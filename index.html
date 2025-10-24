@@ -769,10 +769,13 @@
                                     </div>
                                 )}
 
-                                {groupBy === 'none' ? (
-                                    // Simple list view (no grouping)
-                                    <div className="space-y-3">
-                                        {upcoming.length === 0 ? <p className="text-gray-500 text-center py-4">No upcoming activities</p> : upcoming.map(a => {
+                                {view === 'list' ? (
+                                    // List view with grouping options
+                                    <>
+                                        {groupBy === 'none' ? (
+                                            // Simple list view (no grouping)
+                                            <div className="space-y-3">
+                                                {upcoming.length === 0 ? <p className="text-gray-500 text-center py-4">No upcoming activities</p> : upcoming.map(a => {
                                             const kid = kids.find(k => k.id === a.kidId);
                                             const isExpanded = expandedActivities[a.id];
                                             const isEditing = editAct?.id === a.id;
@@ -990,6 +993,15 @@
                                                 </div>
                                             );
                                         })}
+                                    </div>
+                                )}
+                                    </>
+                                ) : (
+                                    // Calendar view
+                                    <div className="p-8 text-center text-gray-500">
+                                        <p className="text-xl mb-2">📅 Calendar View</p>
+                                        <p>Calendar view coming soon!</p>
+                                        <p className="text-sm mt-2">For now, use List view with grouping options.</p>
                                     </div>
                                 )}
                             </div>
