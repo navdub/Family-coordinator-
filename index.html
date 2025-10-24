@@ -420,6 +420,30 @@
                                                         setNlText('');
                                                         alert('✅ Activity deleted!');
                                                     }
+                                                    
+                                                } else if (result.action === 'query') {
+                                                    // Handle query results
+                                                    const data = result.data;
+                                                    
+                                                    if (data.count === 0) {
+                                                        alert('🔍 ' + data.answer);
+                                                    } else {
+                                                        // Build a nice display of results
+                                                        let message = '🔍 ' + data.answer + '\n\n';
+                                                        message += '📋 Details:\n';
+                                                        data.activities.forEach((act, i) => {
+                                                            message += '\n' + (i + 1) + '. ' + act.title + ' - ' + act.kidName + '\n';
+                                                            message += '   📅 ' + act.date + ' at ' + act.time + '\n';
+                                                            if (act.location) message += '   📍 ' + act.location + '\n';
+                                                            message += '   👤 ' + act.parent + ' (' + act.type + ')';
+                                                            if (i < data.activities.length - 1) message += '\n';
+                                                        });
+                                                        
+                                                        alert(message);
+                                                    }
+                                                    
+                                                    setShowNL(false);
+                                                    setNlText('');
                                                 }
                                                 
                                             } catch (error) {
