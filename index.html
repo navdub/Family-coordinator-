@@ -214,51 +214,83 @@
 
             const logout = () => {
                 localStorage.clear();
-                window.location.reload();
+                setCode(null);
             };
 
             useEffect(() => {
-                if (!code) return;
-                const unsub = db.collection('families').doc(code).collection('kids').onSnapshot(snap => {
-                    setKids(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                if (!code) return setLoading(false);
+                
+                const unsub1 = db.collection('kids').where('familyCode', '==', code).onSnapshot(s => {
+                    setKids(s.docs.map(d => ({ id: d.id, ...d.data() })));
                     setLoading(false);
                 });
-                const unsub2 = db.collection('families').doc(code).collection('activities').onSnapshot(snap => {
-                    setActs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                
+                const unsub2 = db.collection('activities').where('familyCode', '==', code).onSnapshot(s => {
+                    setActs(s.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
-                return () => { unsub(); unsub2(); };
-            }, [code]);
+
+                const interval = setInterval(() => {
+                    const now = new Date();
+                    acts.forEach(a => {
+                        if (!a.notify || !a.time) return;
+                        const actTime = new Date(`${a.date}T${a.time}`);
+                        const diff = actTime - now;
+                        if (diff > 1740000 && diff < 1800000) {
+                            const kid = kids.find(k => k.id === a.kidId);
+                            if ('Notification' in window && Notification.permission === 'granted') {
+                                new Notification(`Upcoming: ${a.title}`, {
+                                    body: `${kid?.name} - ${a.type} in 30 min at ${a.location}`
+                                });
+                            }
+                        }
+                    });
+                }, 60000);
+
+                return () => { unsub1(); unsub2(); clearInterval(interval); };
+            }, [code, acts, kids]);
 
             const addKid = async () => {
                 if (!newKid.name) return;
-                await db.collection('families').doc(code).collection('kids').add(newKid);
-                setNewKid({ name: '', color: colors[Math.floor(Math.random() * colors.length)] });
+                await db.collection('kids').add({ ...newKid, familyCode: code });
+                setNewKid({ name: '', color: '#4ECDC4' });
                 setShowKid(false);
             };
 
             const delKid = async id => {
-                if (!confirm('Delete kid?')) return;
-                await db.collection('families').doc(code).collection('kids').doc(id).delete();
+                const kid = kids.find(k => k.id === id);
+                const kidActs = acts.filter(a => a.kidId === id);
+                if (!confirm(`Delete ${kid?.name}? This will also delete ${kidActs.length} activities.`)) return;
+                await db.collection('kids').doc(id).delete();
+                const snap = await db.collection('activities').where('kidId', '==', id).get();
+                snap.forEach(d => d.ref.delete());
             };
 
             const addAct = async () => {
-                if (!newAct.kidId || !newAct.title || !newAct.date || !newAct.time) return;
-                const actData = { ...newAct, createdAt: new Date() };
+                if (!newAct.title || !newAct.kidId || !newAct.date) return;
+
                 if (newAct.recurring !== 'none') {
-                    const dates = [];
-                    const start = new Date(newAct.date);
-                    const increment = { daily: 1, weekly: 7, biweekly: 14 }[newAct.recurring] || 0;
-                    for (let i = 0; i < 12; i++) {
-                        const d = new Date(start);
-                        d.setDate(d.getDate() + i * increment);
-                        dates.push(d.toISOString().split('T')[0]);
-                    }
-                    for (const date of dates) {
-                        await db.collection('families').doc(code).collection('activities').add({ ...actData, date });
+                    const startDate = new Date(newAct.date);
+                    const interval = newAct.recurring === 'daily' ? 1 : newAct.recurring === 'weekly' ? 7 : 14;
+                    const count = newAct.recurring === 'daily' ? 30 : 12;
+
+                    for (let i = 0; i < count; i++) {
+                        const d = new Date(startDate);
+                        d.setDate(d.getDate() + (interval * i));
+                        await db.collection('activities').add({
+                            ...newAct,
+                            date: d.toISOString().split('T')[0],
+                            familyCode: code,
+                            recurringId: Date.now()
+                        });
                     }
                 } else {
-                    await db.collection('families').doc(code).collection('activities').add(actData);
+                    await db.collection('activities').add({ ...newAct, familyCode: code });
                 }
+
+                if (newAct.notify && 'Notification' in window) {
+                    Notification.requestPermission();
+                }
+
                 setNewAct({ 
                     kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60,
                     type: 'Pick Up', notify: false, recurring: 'none', prepTasks: [], activityCategory: 'Physical', createdBy: 'Mom'
@@ -268,93 +300,55 @@
             };
 
             const delAct = async id => {
-                if (!confirm('Delete activity?')) return;
-                await db.collection('families').doc(code).collection('activities').doc(id).delete();
+                const a = acts.find(act => act.id === id);
+                const kid = kids.find(k => k.id === a?.kidId);
+                if (!confirm(`Delete ${a?.title} - ${kid?.name} on ${a?.date}?`)) return;
+                await db.collection('activities').doc(id).delete();
             };
 
             const parseNL = async () => {
-                setNlLoading(true);
-                try {
-                    const res = await fetch('https://api.anthropic.com/v1/messages', {
-                        method: 'POST',
-                        headers: {
-                            'x-api-key': 'sk-ant-api03-1qjLRCAVK0xTNi8EhQ6IGIL5Qv0pWRMHbU-eViqNaXz-OPeT3bHvN0Fhp3kvgOTpuavuBEYB55pVzXCNx81VYw-BgTB5gAA',
-                            'anthropic-version': '2023-06-01',
-                            'content-type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            model: 'claude-3-5-sonnet-20241022',
-                            max_tokens: 1024,
-                            messages: [{
-                                role: 'user',
-                                content: `Parse this into JSON with fields: title, date (YYYY-MM-DD), time (HH:MM), location, parent, type (Pick Up/Drop Off/Other), activityCategory (Physical/Social/Creative/Academic/Other), prepTasks (array): "${nlText}". Kids: ${kids.map(k => k.name).join(', ')}. Today: ${new Date().toISOString().split('T')[0]}`
-                            }]
-                        })
-                    });
-                    const data = await res.json();
-                    const parsed = JSON.parse(data.content[0].text);
-                    const kid = kids.find(k => nlText.toLowerCase().includes(k.name.toLowerCase()));
-                    setNewAct({ ...newAct, ...parsed, kidId: kid?.id || '' });
-                    if (parsed.prepTasks) setSuggestedPrepTasks(parsed.prepTasks);
-                    setShowNL(false);
-                    setShowAct(true);
-                } catch (e) {
-                    alert('Error parsing: ' + e.message);
-                }
-                setNlLoading(false);
+                alert('Natural language parsing feature requires backend API setup. Please use the "Add Activity" button for now.');
+                setShowNL(false);
             };
 
             const getRecommendations = async () => {
+                if (!recLocation.trim()) return alert('Enter location');
                 setRecLoading(true);
+                setRecommendations([]);
                 try {
-                    const res = await fetch('https://api.anthropic.com/v1/messages', {
+                    const response = await fetch('/api/recommend-activities', {
                         method: 'POST',
-                        headers: {
-                            'x-api-key': 'sk-ant-api03-1qjLRCAVK0xTNi8EhQ6IGIL5Qv0pWRMHbU-eViqNaXz-OPeT3bHvN0Fhp3kvgOTpuavuBEYB55pVzXCNx81VYw-BgTB5gAA',
-                            'anthropic-version': '2023-06-01',
-                            'content-type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            model: 'claude-3-5-sonnet-20241022',
-                            max_tokens: 2048,
-                            messages: [{
-                                role: 'user',
-                                content: `Suggest 5 family activities near ${recLocation}. Kids: ${kids.map(k => k.name).join(', ')}. Preferences: ${recPreferences}. Return JSON array with: title, description, location, estimatedDuration, ageAppropriate, category`
-                            }]
-                        })
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ location: recLocation, kids, preferences: recPreferences })
                     });
-                    const data = await res.json();
-                    setRecommendations(JSON.parse(data.content[0].text));
-                } catch (e) {
-                    alert('Error: ' + e.message);
+                    if (response.ok) {
+                        const data = await response.json();
+                        setRecommendations(data.recommendations || []);
+                    } else {
+                        const error = await response.json();
+                        alert('Error: ' + error.error);
+                    }
+                } catch (error) {
+                    alert('Error: ' + error.message);
                 }
                 setRecLoading(false);
             };
 
             const suggestPrepTasks = async () => {
-                if (!newAct.title || !newAct.activityCategory) return;
+                if (!newAct.title || newAct.title.length < 3) return;
                 setLoadingPrepTasks(true);
                 try {
-                    const res = await fetch('https://api.anthropic.com/v1/messages', {
+                    const response = await fetch('/api/suggest-prep-tasks', {
                         method: 'POST',
-                        headers: {
-                            'x-api-key': 'sk-ant-api03-1qjLRCAVK0xTNi8EhQ6IGIL5Qv0pWRMHbU-eViqNaXz-OPeT3bHvN0Fhp3kvgOTpuavuBEYB55pVzXCNx81VYw-BgTB5gAA',
-                            'anthropic-version': '2023-06-01',
-                            'content-type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            model: 'claude-3-5-sonnet-20241022',
-                            max_tokens: 512,
-                            messages: [{
-                                role: 'user',
-                                content: `Suggest 3-5 prep tasks for "${newAct.title}" (${newAct.activityCategory}). Return JSON array of strings.`
-                            }]
-                        })
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ activityTitle: newAct.title })
                     });
-                    const data = await res.json();
-                    setSuggestedPrepTasks(JSON.parse(data.content[0].text));
-                } catch (e) {
-                    console.error('Error suggesting prep tasks:', e);
+                    if (response.ok) {
+                        const data = await response.json();
+                        setSuggestedPrepTasks(data.tasks || []);
+                    }
+                } catch (error) {
+                    console.error('Error suggesting prep tasks:', error);
                 }
                 setLoadingPrepTasks(false);
             };
@@ -367,6 +361,42 @@
                 setExpandedActivities(prev => ({ ...prev, [actId]: !prev[actId] }));
             };
 
+            const getBalanceByCategory = () => {
+                const cats = {};
+                acts.forEach(a => {
+                    const cat = a.activityCategory || 'Other';
+                    if (!cats[cat]) cats[cat] = { total: 0, byKid: {} };
+                    cats[cat].total++;
+                    const kid = kids.find(k => k.id === a.kidId);
+                    if (kid) {
+                        cats[cat].byKid[kid.name] = (cats[cat].byKid[kid.name] || 0) + 1;
+                    }
+                });
+                return cats;
+            };
+
+            const getParentLoadBalance = () => {
+                const balance = { Mom: 0, Dad: 0, Both: 0 };
+                const created = { Mom: 0, Dad: 0 };
+                
+                acts.forEach(a => {
+                    balance[a.parent] = (balance[a.parent] || 0) + 1;
+                    if (a.createdBy) created[a.createdBy] = (created[a.createdBy] || 0) + 1;
+                });
+
+                return { balance, created };
+            };
+
+            const addRecommendedActivity = (rec, kidId) => {
+                setNewAct({
+                    kidId, title: rec.title, date: new Date().toISOString().split('T')[0], time: '', location: rec.venue || '',
+                    parent: 'Mom', notes: rec.notes || '', duration: rec.duration || 60, type: rec.type || 'Other',
+                    notify: false, recurring: 'none', prepTasks: [], activityCategory: rec.category || 'Physical', createdBy: 'Mom'
+                });
+                setShowRecommend(false);
+                setShowAct(true);
+            };
+
             useEffect(() => {
                 if (newAct.title && newAct.activityCategory && showAct) {
                     suggestPrepTasks();
@@ -377,8 +407,8 @@
             if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
             const today = new Date().toISOString().split('T')[0];
-            const upcoming = acts.filter(a => a.date >= today).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-            const past = acts.filter(a => a.date < today).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+            const upcoming = acts.filter(a => a.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+            const past = acts.filter(a => a.date < today).sort((a, b) => b.date.localeCompare(a.date));
 
             const groupActivities = (activities) => {
                 if (groupBy === 'kid') {
@@ -515,6 +545,9 @@
                             <button onClick={() => setMainView('calendar')} className={`flex-1 py-2 px-4 rounded-md transition ${mainView === 'calendar' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}>
                                 Calendar
                             </button>
+                            <button onClick={() => setMainView('balance')} className={`flex-1 py-2 px-4 rounded-md transition ${mainView === 'balance' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}>
+                                Balance
+                            </button>
                         </div>
 
                         {/* Kids Management View */}
@@ -600,6 +633,76 @@
                                             ));
                                         })()
                                     )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Balance Dashboard View */}
+                        {mainView === 'balance' && (
+                            <div className="space-y-6">
+                                <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg">
+                                    <h3 className="text-2xl font-bold mb-4">📊 Parent Load Balance</h3>
+                                    <div className="space-y-4">
+                                        {(() => {
+                                            const parentLoad = getParentLoadBalance();
+                                            return (
+                                                <>
+                                                    <div>
+                                                        <p className="text-sm font-semibold mb-2">Activities Created:</p>
+                                                        <div className="flex gap-4">
+                                                            <div>Mom: <span className="font-bold text-2xl">{parentLoad.created.Mom || 0}</span></div>
+                                                            <div>Dad: <span className="font-bold text-2xl">{parentLoad.created.Dad || 0}</span></div>
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-semibold mb-2">Activities Assigned:</p>
+                                                        <div className="flex gap-4">
+                                                            <div>Mom: <span className="font-bold text-2xl">{parentLoad.balance.Mom || 0}</span></div>
+                                                            <div>Dad: <span className="font-bold text-2xl">{parentLoad.balance.Dad || 0}</span></div>
+                                                            <div>Both: <span className="font-bold text-2xl">{parentLoad.balance.Both || 0}</span></div>
+                                                        </div>
+                                                    </div>
+                                                    {parentLoad.created.Mom > 0 || parentLoad.created.Dad > 0 ? (
+                                                        <div className="mt-4 p-4 bg-white rounded-lg">
+                                                            <p className="text-sm">
+                                                                {parentLoad.created.Mom > parentLoad.created.Dad * 2 ? 
+                                                                    '💡 Dad: Help balance the mental load by creating more activities!' :
+                                                                    parentLoad.created.Dad > parentLoad.created.Mom * 2 ?
+                                                                    '💡 Mom: Help balance the mental load by creating more activities!' :
+                                                                    '✅ Great balance on activity creation!'}
+                                                            </p>
+                                                        </div>
+                                                    ) : null}
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+
+                                <div className="bg-gradient-to-r from-blue-50 to-cyan-50 p-6 rounded-lg">
+                                    <h3 className="text-2xl font-bold mb-4">🎯 Activity Balance by Category</h3>
+                                    {(() => {
+                                        const categoryBalance = getBalanceByCategory();
+                                        return Object.keys(categoryBalance).length === 0 ? (
+                                            <p className="text-gray-500">No activities yet</p>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {Object.entries(categoryBalance).map(([cat, data]) => (
+                                                    <div key={cat} className="bg-white p-4 rounded-lg">
+                                                        <h4 className="font-bold text-lg mb-2">{cat}</h4>
+                                                        <p className="text-sm text-gray-600 mb-2">Total: {data.total}</p>
+                                                        <div className="flex gap-4 flex-wrap">
+                                                            {Object.entries(data.byKid).map(([kidName, count]) => (
+                                                                <div key={kidName} className="text-sm">
+                                                                    {kidName}: <span className="font-bold">{count}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         )}
