@@ -332,6 +332,53 @@
             const categoryBalance = getBalanceByCategory();
             const parentLoad = getParentLoadBalance();
 
+            // Group activities based on selected groupBy option
+            const getGroupedActivities = (activities) => {
+                if (groupBy === 'none') {
+                    return { 'All Activities': activities };
+                }
+
+                const grouped = {};
+                
+                activities.forEach(activity => {
+                    let groupKey;
+                    
+                    switch(groupBy) {
+                        case 'kid':
+                            const kid = kids.find(k => k.id === activity.kidId);
+                            groupKey = kid ? kid.name : 'Unknown Kid';
+                            break;
+                        case 'title':
+                            groupKey = activity.title || 'Untitled';
+                            break;
+                        case 'type':
+                            groupKey = activity.type || 'Other';
+                            break;
+                        case 'parent':
+                            groupKey = activity.parent || 'Unassigned';
+                            break;
+                        default:
+                            groupKey = 'All Activities';
+                    }
+                    
+                    if (!grouped[groupKey]) {
+                        grouped[groupKey] = [];
+                    }
+                    grouped[groupKey].push(activity);
+                });
+                
+                // Sort activities within each group
+                Object.keys(grouped).forEach(key => {
+                    grouped[key].sort((a, b) => a.date.localeCompare(b.date));
+                });
+                
+                return grouped;
+            };
+
+            const groupedUpcoming = getGroupedActivities(upcoming);
+            const groupNames = Object.keys(groupedUpcoming).sort();
+
+
             return (
                 <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
                     <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl p-6">
@@ -722,94 +769,229 @@
                                     </div>
                                 )}
 
-                                <div className="space-y-3">
-                                    {upcoming.length === 0 ? <p className="text-gray-500 text-center py-4">No upcoming activities</p> : upcoming.map(a => {
-                                        const kid = kids.find(k => k.id === a.kidId);
-                                        const isExpanded = expandedActivities[a.id];
-                                        const isEditing = editAct?.id === a.id;
-                                        return (
-                                            <div key={a.id} className="p-4 border-l-4 rounded shadow bg-white" style={{ borderLeftColor: kid?.color }}>
-                                                {isEditing ? (
-                                                    // Edit mode
-                                                    <div className="space-y-3">
-                                                        <h3 className="font-bold text-lg mb-3">✏️ Edit Activity</h3>
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                            <select value={editAct.kidId} onChange={e => setEditAct({ ...editAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
-                                                                <option value="">Select Kid</option>
-                                                                {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
-                                                            </select>
-                                                            <input value={editAct.title} onChange={e => setEditAct({ ...editAct, title: e.target.value })} placeholder="Activity" className="px-4 py-2 border rounded" />
-                                                            <input type="date" value={editAct.date} onChange={e => setEditAct({ ...editAct, date: e.target.value })} className="px-4 py-2 border rounded" />
-                                                            <input type="time" value={editAct.time} onChange={e => setEditAct({ ...editAct, time: e.target.value })} className="px-4 py-2 border rounded" />
-                                                            <input value={editAct.location} onChange={e => setEditAct({ ...editAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
-                                                            <select value={editAct.parent} onChange={e => setEditAct({ ...editAct, parent: e.target.value })} className="px-4 py-2 border rounded">
-                                                                <option>Mom</option>
-                                                                <option>Dad</option>
-                                                                <option>Both</option>
-                                                            </select>
-                                                            <select value={editAct.type} onChange={e => setEditAct({ ...editAct, type: e.target.value })} className="px-4 py-2 border rounded">
-                                                                <option>Pick Up</option>
-                                                                <option>Drop Off</option>
-                                                                <option>Other</option>
-                                                            </select>
-                                                            <select value={editAct.activityCategory} onChange={e => setEditAct({ ...editAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
-                                                                <option>Physical</option>
-                                                                <option>Social</option>
-                                                                <option>Creative</option>
-                                                                <option>Academic</option>
-                                                                <option>Other</option>
-                                                            </select>
-                                                        </div>
-                                                        <textarea value={editAct.notes} onChange={e => setEditAct({ ...editAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded" rows="2" />
-                                                        <div className="flex gap-2">
-                                                            <button onClick={saveEdit} className="px-4 py-2 bg-green-500 text-white rounded">💾 Save</button>
-                                                            <button onClick={cancelEdit} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    // View mode
-                                                    <div className="flex justify-between items-start">
-                                                        <div className="flex-1">
-                                                            <div className="flex items-center gap-2">
-                                                                <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 hover:text-gray-700">
-                                                                    {isExpanded ? '▼' : '▶'}
-                                                                </button>
-                                                                <div>
-                                                                    <h3 className="font-bold">
-                                                                        {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
-                                                                        {a.prepTasks?.length > 0 && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">+{a.prepTasks.length} tasks</span>}
-                                                                    </h3>
-                                                                    <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent}</p>
-                                                                    
-                                                                    {isExpanded && (
-                                                                        <div className="mt-2 p-3 bg-gray-50 rounded text-sm">
-                                                                            <p><strong>Location:</strong> {a.location || 'Not specified'}</p>
-                                                                            <p><strong>Category:</strong> {a.activityCategory || 'Other'}</p>
-                                                                            <p><strong>Created by:</strong> {a.createdBy || 'Unknown'}</p>
-                                                                            {a.notes && <p><strong>Notes:</strong> {a.notes}</p>}
-                                                                            {a.prepTasks?.length > 0 && (
-                                                                                <div className="mt-2">
-                                                                                    <p className="font-semibold mb-1">Prep Tasks:</p>
-                                                                                    <ul className="list-disc ml-5">
-                                                                                        {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
-                                                                                    </ul>
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
+                                {groupBy === 'none' ? (
+                                    // Simple list view (no grouping)
+                                    <div className="space-y-3">
+                                        {upcoming.length === 0 ? <p className="text-gray-500 text-center py-4">No upcoming activities</p> : upcoming.map(a => {
+                                            const kid = kids.find(k => k.id === a.kidId);
+                                            const isExpanded = expandedActivities[a.id];
+                                            const isEditing = editAct?.id === a.id;
+                                            return (
+                                                <div key={a.id} className="p-4 border-l-4 rounded shadow bg-white" style={{ borderLeftColor: kid?.color }}>
+                                                    {isEditing ? (
+                                                        // Edit mode
+                                                        <div className="space-y-3">
+                                                            <h3 className="font-bold text-lg mb-3">✏️ Edit Activity</h3>
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                <select value={editAct.kidId} onChange={e => setEditAct({ ...editAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
+                                                                    <option value="">Select Kid</option>
+                                                                    {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+                                                                </select>
+                                                                <input value={editAct.title} onChange={e => setEditAct({ ...editAct, title: e.target.value })} placeholder="Activity" className="px-4 py-2 border rounded" />
+                                                                <input type="date" value={editAct.date} onChange={e => setEditAct({ ...editAct, date: e.target.value })} className="px-4 py-2 border rounded" />
+                                                                <input type="time" value={editAct.time} onChange={e => setEditAct({ ...editAct, time: e.target.value })} className="px-4 py-2 border rounded" />
+                                                                <input value={editAct.location} onChange={e => setEditAct({ ...editAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
+                                                                <select value={editAct.parent} onChange={e => setEditAct({ ...editAct, parent: e.target.value })} className="px-4 py-2 border rounded">
+                                                                    <option>Mom</option>
+                                                                    <option>Dad</option>
+                                                                    <option>Both</option>
+                                                                </select>
+                                                                <select value={editAct.type} onChange={e => setEditAct({ ...editAct, type: e.target.value })} className="px-4 py-2 border rounded">
+                                                                    <option>Pick Up</option>
+                                                                    <option>Drop Off</option>
+                                                                    <option>Other</option>
+                                                                </select>
+                                                                <select value={editAct.activityCategory} onChange={e => setEditAct({ ...editAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
+                                                                    <option>Physical</option>
+                                                                    <option>Social</option>
+                                                                    <option>Creative</option>
+                                                                    <option>Academic</option>
+                                                                    <option>Other</option>
+                                                                </select>
+                                                            </div>
+                                                            <textarea value={editAct.notes} onChange={e => setEditAct({ ...editAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded" rows="2" />
+                                                            <div className="flex gap-2">
+                                                                <button onClick={saveEdit} className="px-4 py-2 bg-green-500 text-white rounded">💾 Save</button>
+                                                                <button onClick={cancelEdit} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
                                                             </div>
                                                         </div>
-                                                        <div className="flex gap-2">
-                                                            <button onClick={() => startEdit(a)} className="text-blue-500 text-xl hover:text-blue-700" title="Edit">✏️</button>
-                                                            <button onClick={() => delAct(a.id)} className="text-red-500 text-xl hover:text-red-700" title="Delete">×</button>
+                                                    ) : (
+                                                        // View mode
+                                                        <div className="flex justify-between items-start">
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 hover:text-gray-700">
+                                                                        {isExpanded ? '▼' : '▶'}
+                                                                    </button>
+                                                                    <div>
+                                                                        <h3 className="font-bold">
+                                                                            {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
+                                                                            {a.prepTasks?.length > 0 && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">+{a.prepTasks.length} tasks</span>}
+                                                                        </h3>
+                                                                        <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent}</p>
+                                                                        
+                                                                        {isExpanded && (
+                                                                            <div className="mt-2 p-3 bg-gray-50 rounded text-sm">
+                                                                                <p><strong>Location:</strong> {a.location || 'Not specified'}</p>
+                                                                                <p><strong>Category:</strong> {a.activityCategory || 'Other'}</p>
+                                                                                <p><strong>Created by:</strong> {a.createdBy || 'Unknown'}</p>
+                                                                                {a.notes && <p><strong>Notes:</strong> {a.notes}</p>}
+                                                                                {a.prepTasks?.length > 0 && (
+                                                                                    <div className="mt-2">
+                                                                                        <p className="font-semibold mb-1">Prep Tasks:</p>
+                                                                                        <ul className="list-disc ml-5">
+                                                                                            {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
+                                                                                        </ul>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => startEdit(a)} className="text-blue-500 text-xl hover:text-blue-700" title="Edit">✏️</button>
+                                                                <button onClick={() => delAct(a.id)} className="text-red-500 text-xl hover:text-red-700" title="Delete">×</button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    // Grouped card view
+                                    <div className="space-y-4">
+                                        {groupNames.map(groupName => {
+                                            const groupActivities = groupedUpcoming[groupName];
+                                            const isGroupExpanded = expandedGroups[groupName];
+                                            const groupKid = groupBy === 'kid' ? kids.find(k => k.name === groupName) : null;
+                                            
+                                            return (
+                                                <div key={groupName} className="border-2 rounded-lg overflow-hidden shadow-lg" style={{ borderColor: groupKid?.color || '#e5e7eb' }}>
+                                                    {/* Group Header - Clickable Card */}
+                                                    <div 
+                                                        onClick={() => setExpandedGroups(prev => ({ ...prev, [groupName]: !prev[groupName] }))}
+                                                        className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                                                        style={{ backgroundColor: groupKid ? groupKid.color + '20' : '#f9fafb' }}
+                                                    >
+                                                        <div className="flex justify-between items-center">
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-2xl">{isGroupExpanded ? '▼' : '▶'}</span>
+                                                                <div>
+                                                                    <h3 className="text-xl font-bold" style={{ color: groupKid?.color || '#1f2937' }}>
+                                                                        {groupName}
+                                                                    </h3>
+                                                                    <p className="text-sm text-gray-600">
+                                                                        {groupActivities.length} {groupActivities.length === 1 ? 'activity' : 'activities'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-sm text-gray-500">
+                                                                    {groupActivities[0]?.date} - {groupActivities[groupActivities.length - 1]?.date}
+                                                                </p>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                                                    
+                                                    {/* Group Activities - Shown when expanded */}
+                                                    {isGroupExpanded && (
+                                                        <div className="p-4 bg-white space-y-3 border-t-2" style={{ borderTopColor: groupKid?.color || '#e5e7eb' }}>
+                                                            {groupActivities.map(a => {
+                                                                const kid = kids.find(k => k.id === a.kidId);
+                                                                const isExpanded = expandedActivities[a.id];
+                                                                const isEditing = editAct?.id === a.id;
+                                                                
+                                                                return (
+                                                                    <div key={a.id} className="p-4 border-l-4 rounded shadow-sm bg-gray-50" style={{ borderLeftColor: kid?.color }}>
+                                                                        {isEditing ? (
+                                                                            // Edit mode
+                                                                            <div className="space-y-3">
+                                                                                <h3 className="font-bold text-lg mb-3">✏️ Edit Activity</h3>
+                                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                                    <select value={editAct.kidId} onChange={e => setEditAct({ ...editAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
+                                                                                        <option value="">Select Kid</option>
+                                                                                        {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+                                                                                    </select>
+                                                                                    <input value={editAct.title} onChange={e => setEditAct({ ...editAct, title: e.target.value })} placeholder="Activity" className="px-4 py-2 border rounded" />
+                                                                                    <input type="date" value={editAct.date} onChange={e => setEditAct({ ...editAct, date: e.target.value })} className="px-4 py-2 border rounded" />
+                                                                                    <input type="time" value={editAct.time} onChange={e => setEditAct({ ...editAct, time: e.target.value })} className="px-4 py-2 border rounded" />
+                                                                                    <input value={editAct.location} onChange={e => setEditAct({ ...editAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
+                                                                                    <select value={editAct.parent} onChange={e => setEditAct({ ...editAct, parent: e.target.value })} className="px-4 py-2 border rounded">
+                                                                                        <option>Mom</option>
+                                                                                        <option>Dad</option>
+                                                                                        <option>Both</option>
+                                                                                    </select>
+                                                                                    <select value={editAct.type} onChange={e => setEditAct({ ...editAct, type: e.target.value })} className="px-4 py-2 border rounded">
+                                                                                        <option>Pick Up</option>
+                                                                                        <option>Drop Off</option>
+                                                                                        <option>Other</option>
+                                                                                    </select>
+                                                                                    <select value={editAct.activityCategory} onChange={e => setEditAct({ ...editAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
+                                                                                        <option>Physical</option>
+                                                                                        <option>Social</option>
+                                                                                        <option>Creative</option>
+                                                                                        <option>Academic</option>
+                                                                                        <option>Other</option>
+                                                                                    </select>
+                                                                                </div>
+                                                                                <textarea value={editAct.notes} onChange={e => setEditAct({ ...editAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded" rows="2" />
+                                                                                <div className="flex gap-2">
+                                                                                    <button onClick={saveEdit} className="px-4 py-2 bg-green-500 text-white rounded">💾 Save</button>
+                                                                                    <button onClick={cancelEdit} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            // View mode
+                                                                            <div className="flex justify-between items-start">
+                                                                                <div className="flex-1">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 hover:text-gray-700">
+                                                                                            {isExpanded ? '▼' : '▶'}
+                                                                                        </button>
+                                                                                        <div>
+                                                                                            <h3 className="font-bold">
+                                                                                                {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
+                                                                                                {a.prepTasks?.length > 0 && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">+{a.prepTasks.length} tasks</span>}
+                                                                                            </h3>
+                                                                                            <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent}</p>
+                                                                                            
+                                                                                            {isExpanded && (
+                                                                                                <div className="mt-2 p-3 bg-white rounded text-sm">
+                                                                                                    <p><strong>Location:</strong> {a.location || 'Not specified'}</p>
+                                                                                                    <p><strong>Category:</strong> {a.activityCategory || 'Other'}</p>
+                                                                                                    <p><strong>Created by:</strong> {a.createdBy || 'Unknown'}</p>
+                                                                                                    {a.notes && <p><strong>Notes:</strong> {a.notes}</p>}
+                                                                                                    {a.prepTasks?.length > 0 && (
+                                                                                                        <div className="mt-2">
+                                                                                                            <p className="font-semibold mb-1">Prep Tasks:</p>
+                                                                                                            <ul className="list-disc ml-5">
+                                                                                                                {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
+                                                                                                            </ul>
+                                                                                                        </div>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div className="flex gap-2">
+                                                                                    <button onClick={() => startEdit(a)} className="text-blue-500 text-xl hover:text-blue-700" title="Edit">✏️</button>
+                                                                                    <button onClick={() => delAct(a.id)} className="text-red-500 text-xl hover:text-red-700" title="Delete">×</button>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
