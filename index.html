@@ -83,7 +83,7 @@
             const [showAct, setShowAct] = useState(false);
             const [showCode, setShowCode] = useState(false);
             const [showPast, setShowPast] = useState(false);
-            const [showNL, setShowNL] = useState(false);
+            const [showNL, setShowNL] = useState(true); // Always show Ask section by default
             const [showRecommend, setShowRecommend] = useState(false);
             const [editAct, setEditAct] = useState(null); // Track which activity is being edited
             const [view, setView] = useState('list');
@@ -334,6 +334,8 @@
 
             // Group activities based on selected groupBy option
             const getGroupedActivities = (activities) => {
+                console.log('🔍 Grouping Debug:', { groupBy, activityCount: activities.length });
+                
                 if (groupBy === 'none') {
                     return { 'All Activities': activities };
                 }
@@ -372,11 +374,14 @@
                     grouped[key].sort((a, b) => a.date.localeCompare(b.date));
                 });
                 
+                console.log('✅ Grouped result:', { groupCount: Object.keys(grouped).length, groups: Object.keys(grouped) });
                 return grouped;
             };
 
             const groupedUpcoming = getGroupedActivities(upcoming);
             const groupNames = Object.keys(groupedUpcoming).sort();
+            
+            console.log('📊 Display Info:', { view, groupBy, groupNames });
 
 
             return (
@@ -409,11 +414,9 @@
                                     <h2 className="text-2xl font-bold text-white mb-1">💬 Ask</h2>
                                     <p className="text-blue-100 text-sm">Add, edit, or delete activities or just ask a question about activities</p>
                                 </div>
-                                {!showNL && (
-                                    <button onClick={() => setShowNL(true)} className="px-6 py-3 bg-white text-blue-600 rounded-lg font-bold hover:bg-blue-50 transition shadow-md">
-                                        Start Typing
-                                    </button>
-                                )}
+                                <button onClick={() => setShowNL(!showNL)} className="px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg font-bold hover:bg-opacity-30 transition">
+                                    {showNL ? '▼ Minimize' : '▶ Expand'}
+                                </button>
                             </div>
                             
                             {showNL && (
