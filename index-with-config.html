@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Activity Coordinator</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <!-- App Configuration - Change backend URL here -->
+    <script src="config.js"></script>
+    
+    <!-- API Service - All backend calls -->
+    <script src="services/api.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Initialize Firebase with config
+        firebase.initializeApp(APP_CONFIG.FIREBASE_CONFIG);
+        const db = firebase.firestore();
+
+        function LoginScreen({ onLogin }) {
+            const [code, setCode] = useState('');
+            const [name, setName] = useState('');
+            const [isNew, setIsNew] = useState(false);
+            const [err, setErr] = useState('');
+
+            const login = async () => {
+                if (!code) return setErr('Enter code');
+                try {
+                    const doc = await db.collection('families').doc(code.toUpperCase()).get();
+                    if (doc.exists) onLogin(code.toUpperCase(), doc.data().name);
+                    else setErr('Code not found');
+                } catch (e) { setErr('Error: ' + e.message); }
+            };
+
+            const create = async () => {
+                if (!name) return setErr('Enter name');
+                const newCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+                try {
+                    await db.collection('families').doc(newCode).set({ name, createdAt: new Date() });
+                    onLogin(newCode, name);
+                } catch (e) { setErr('Error: ' + e.message); }
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+                        <h1 className="text-3xl font-bold text-center mb-6">Family Activity Tracker</h1>
+                        {err && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{err}</div>}
+                        {!isNew ? (
+                            <>
+                                <input value={code} onChange={e => setCode(e.target.value.toUpperCase())} placeholder="Family Code" className="w-full px-4 py-3 border rounded-lg mb-4 uppercase" />
+                                <button onClick={login} className="w-full bg-purple-600 text-white py-3 rounded-lg mb-3">Login</button>
+                                <button onClick={() => setIsNew(true)} className="text-purple-600">Create Family →</button>
+                            </>
+                        ) : (
+                            <>
+                                <input value={name} onChange={e => setName(e.target.value)} placeholder="Family Name" className="w-full px-4 py-3 border rounded-lg mb-4" />
+                                <button onClick={create} className="w-full bg-green-600 text-white py-3 rounded-lg mb-3">Create</button>
+                                <button onClick={() => setIsNew(false)} className="text-gray-600">← Back</button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function App() {
+            const [code, setCode] = useState(localStorage.getItem('familyCode'));
+            const [name, setName] = useState(localStorage.getItem('familyName'));
+            const [kids, setKids] = useState([]);
+            const [acts, setActs] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [showKid, setShowKid] = useState(false);
+            const [showAct, setShowAct] = useState(false);
+            const [showCode, setShowCode] = useState(false);
+            const [showPast, setShowPast] = useState(false);
+            const [showNL, setShowNL] = useState(false);
+            const [showRecommend, setShowRecommend] = useState(false);
+            const [view, setView] = useState('list');
+            const [mainView, setMainView] = useState('activities');
+            const [groupBy, setGroupBy] = useState('none');
+            const [expandedGroups, setExpandedGroups] = useState({});
+            const [expandedActivities, setExpandedActivities] = useState({});
+            const [newKid, setNewKid] = useState({ name: '', color: '#4ECDC4' });
+            const [newAct, setNewAct] = useState({ 
+                kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60,
+                type: 'Pick Up', notify: false, recurring: 'none', prepTasks: [], activityCategory: 'Physical', createdBy: 'Mom'
+            });
+            const [nlText, setNlText] = useState('');
+            const [nlLoading, setNlLoading] = useState(false);
+            const [recLocation, setRecLocation] = useState('');
+            const [recPreferences, setRecPreferences] = useState('');
+            const [recommendations, setRecommendations] = useState([]);
+            const [recLoading, setRecLoading] = useState(false);
+            const [suggestedPrepTasks, setSuggestedPrepTasks] = useState([]);
+            const [loadingPrepTasks, setLoadingPrepTasks] = useState(false);
+            const colors = ['#FF6B9D', '#4ECDC4', '#95E1D3', '#F38181', '#AA96DA'];
+
+            const handleLogin = (c, n) => {
+                setCode(c);
+                setName(n);
+                localStorage.setItem('familyCode', c);
+                localStorage.setItem('familyName', n);
+            };
+
+            const logout = () => {
+                localStorage.clear();
+                setCode(null);
+            };
+
+            useEffect(() => {
+                if (!code) return setLoading(false);
+                
+                const unsub1 = db.collection('kids').where('familyCode', '==', code).onSnapshot(s => {
+                    setKids(s.docs.map(d => ({ id: d.id, ...d.data() })));
+                    setLoading(false);
+                });
+                
+                const unsub2 = db.collection('activities').where('familyCode', '==', code).onSnapshot(s => {
+                    setActs(s.docs.map(d => ({ id: d.id, ...d.data() })));
+                });
+
+                const interval = setInterval(() => {
+                    const now = new Date();
+                    acts.forEach(a => {
+                        if (!a.notify || !a.time) return;
+                        const actTime = new Date(`${a.date}T${a.time}`);
+                        const diff = actTime - now;
+                        if (diff > 1740000 && diff < 1800000) {
+                            const kid = kids.find(k => k.id === a.kidId);
+                            if ('Notification' in window && Notification.permission === 'granted') {
+                                new Notification(`Upcoming: ${a.title}`, {
+                                    body: `${kid?.name} - ${a.type} in 30 min at ${a.location}`
+                                });
+                            }
+                        }
+                    });
+                }, 60000);
+
+                return () => { unsub1(); unsub2(); clearInterval(interval); };
+            }, [code, acts, kids]);
+
+            const addKid = async () => {
+                if (!newKid.name) return;
+                await db.collection('kids').add({ ...newKid, familyCode: code });
+                setNewKid({ name: '', color: '#4ECDC4' });
+                setShowKid(false);
+            };
+
+            const delKid = async (id) => {
+                const kid = kids.find(k => k.id === id);
+                const kidActs = acts.filter(a => a.kidId === id);
+                if (!confirm(`Delete ${kid?.name}? This will also delete ${kidActs.length} activities.`)) return;
+                await db.collection('kids').doc(id).delete();
+                const snap = await db.collection('activities').where('kidId', '==', id).get();
+                snap.forEach(d => d.ref.delete());
+            };
+
+            const getSuggestedPrepTasks = async (title) => {
+                if (!title || title.length < 3) return;
+                setLoadingPrepTasks(true);
+                try {
+                    const response = await fetch('/api/suggest-prep-tasks', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ activityTitle: title })
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        setSuggestedPrepTasks(data.tasks || []);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                }
+                setLoadingPrepTasks(false);
+            };
+
+            const addAct = async () => {
+                if (!newAct.title || !newAct.kidId || !newAct.date) return;
+
+                if (newAct.recurring !== 'none') {
+                    const startDate = new Date(newAct.date);
+                    const interval = newAct.recurring === 'daily' ? 1 : newAct.recurring === 'weekly' ? 7 : 14;
+                    const count = newAct.recurring === 'daily' ? 30 : 12;
+
+                    for (let i = 0; i < count; i++) {
+                        const d = new Date(startDate);
+                        d.setDate(d.getDate() + (interval * i));
+                        await db.collection('activities').add({
+                            ...newAct,
+                            date: d.toISOString().split('T')[0],
+                            familyCode: code,
+                            recurringId: Date.now()
+                        });
+                    }
+                } else {
+                    await db.collection('activities').add({ ...newAct, familyCode: code });
+                }
+
+                if (newAct.notify && 'Notification' in window) {
+                    Notification.requestPermission();
+                }
+
+                setNewAct({ 
+                    kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60,
+                    type: 'Pick Up', notify: false, recurring: 'none', prepTasks: [], activityCategory: 'Physical', createdBy: 'Mom'
+                });
+                setSuggestedPrepTasks([]);
+                setShowAct(false);
+            };
+
+            const delAct = async (id) => {
+                const a = acts.find(act => act.id === id);
+                const kid = kids.find(k => k.id === a?.kidId);
+                if (!confirm(`Delete ${a?.title} - ${kid?.name} on ${a?.date}?`)) return;
+                await db.collection('activities').doc(id).delete();
+            };
+
+            const toggleActivityExpanded = (id) => {
+                setExpandedActivities(prev => ({ ...prev, [id]: !prev[id] }));
+            };
+
+            const getBalanceByCategory = () => {
+                const cats = {};
+                acts.forEach(a => {
+                    const cat = a.activityCategory || 'Other';
+                    if (!cats[cat]) cats[cat] = { total: 0, byKid: {} };
+                    cats[cat].total++;
+                    const kid = kids.find(k => k.id === a.kidId);
+                    if (kid) {
+                        cats[cat].byKid[kid.name] = (cats[cat].byKid[kid.name] || 0) + 1;
+                    }
+                });
+                return cats;
+            };
+
+            const getParentLoadBalance = () => {
+                const balance = { Mom: 0, Dad: 0, Both: 0 };
+                const created = { Mom: 0, Dad: 0 };
+                
+                acts.forEach(a => {
+                    balance[a.parent] = (balance[a.parent] || 0) + 1;
+                    if (a.createdBy) created[a.createdBy] = (created[a.createdBy] || 0) + 1;
+                });
+
+                return { balance, created };
+            };
+
+            const getRecommendations = async () => {
+                if (!recLocation.trim()) return alert('Enter location');
+                setRecLoading(true);
+                setRecommendations([]);
+                try {
+                    const response = await fetch('/api/recommend-activities', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ location: recLocation, kids, preferences: recPreferences })
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        setRecommendations(data.recommendations || []);
+                    } else {
+                        const error = await response.json();
+                        alert('Error: ' + error.error);
+                    }
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                }
+                setRecLoading(false);
+            };
+
+            const addRecommendedActivity = (rec, kidId) => {
+                setNewAct({
+                    kidId, title: rec.title, date: new Date().toISOString().split('T')[0], time: '', location: rec.venue || '',
+                    parent: 'Mom', notes: rec.notes || '', duration: rec.duration || 60, type: rec.type || 'Other',
+                    notify: false, recurring: 'none', prepTasks: [], activityCategory: rec.category || 'Physical', createdBy: 'Mom'
+                });
+                setShowRecommend(false);
+                setShowAct(true);
+            };
+
+            if (!code) return <LoginScreen onLogin={handleLogin} />;
+            if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-xl">Loading...</div></div>;
+
+            const today = new Date().toISOString().split('T')[0];
+            const upcoming = acts.filter(a => a.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+            const past = acts.filter(a => a.date < today).sort((a, b) => b.date.localeCompare(a.date));
+            const categoryBalance = getBalanceByCategory();
+            const parentLoad = getParentLoadBalance();
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
+                    <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h1 className="text-3xl font-bold">{name}</h1>
+                            <div className="flex gap-2">
+                                <button onClick={() => setShowCode(true)} className="px-4 py-2 bg-purple-100 rounded-lg">Share</button>
+                                <button onClick={logout} className="px-4 py-2 bg-gray-100 rounded-lg">Logout</button>
+                            </div>
+                        </div>
+
+                        {showCode && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                                <div className="bg-white rounded-2xl p-8 max-w-md">
+                                    <h2 className="text-2xl font-bold mb-4">Family Code</h2>
+                                    <div className="bg-purple-50 p-4 rounded-lg mb-4">
+                                        <p className="text-3xl font-mono text-center text-purple-600">{code}</p>
+                                    </div>
+                                    <button onClick={() => { navigator.clipboard.writeText(code); alert('Copied!'); }} className="w-full bg-purple-600 text-white py-3 rounded-lg mb-2">Copy</button>
+                                    <button onClick={() => setShowCode(false)} className="w-full bg-gray-200 py-3 rounded-lg">Close</button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mb-6 p-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl shadow-lg">
+                            <div className="flex justify-between items-center mb-3">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-white mb-1">✨ Quick Actions</h2>
+                                    <p className="text-blue-100 text-sm">Add, edit, or delete activities with natural language</p>
+                                </div>
+                                {!showNL && (
+                                    <button onClick={() => setShowNL(true)} className="px-6 py-3 bg-white text-blue-600 rounded-lg font-bold hover:bg-blue-50 transition shadow-md">
+                                        Start Typing
+                                    </button>
+                                )}
+                            </div>
+                            
+                            {showNL && (
+                                <div className="bg-white rounded-lg p-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3">
+                                        <div className="bg-green-50 p-2 rounded">
+                                            <p className="font-semibold text-xs text-green-800 mb-1">➕ ADD</p>
+                                            <p className="text-xs text-gray-600">"Emma soccer Tuesday 4pm"</p>
+                                        </div>
+                                        <div className="bg-blue-50 p-2 rounded">
+                                            <p className="font-semibold text-xs text-blue-800 mb-1">✏️ EDIT</p>
+                                            <p className="text-xs text-gray-600">"change Emma soccer to 5pm"</p>
+                                        </div>
+                                        <div className="bg-red-50 p-2 rounded">
+                                            <p className="font-semibold text-xs text-red-800 mb-1">🗑️ DELETE</p>
+                                            <p className="text-xs text-gray-600">"delete Emma soccer Tuesday"</p>
+                                        </div>
+                                    </div>
+                                    <textarea value={nlText} onChange={e => setNlText(e.target.value)} placeholder="Type what you want to do..." className="w-full px-4 py-3 border-2 border-blue-200 rounded-lg mb-3" rows="2" autoFocus />
+                                    <div className="flex gap-2">
+                                        <button onClick={async () => {
+                                            if (!nlText.trim()) return alert('Please type something');
+                                            
+                                            setNlLoading(true);
+                                            try {
+                                                // Use APIService instead of direct fetch
+                                                const result = await APIService.parseActivity(nlText, kids, acts);
+                                                
+                                                if (result.action === 'add') {
+                                                    const matchingKid = kids.find(k => k.id === result.data.kidId);
+                                                    
+                                                    if (!matchingKid) {
+                                                        alert('Kid not found. Available: ' + kids.map(k => k.name).join(', '));
+                                                        setNlLoading(false);
+                                                        return;
+                                                    }
+                                                    
+                                                    const newActivity = {
+                                                        kidId: result.data.kidId,
+                                                        title: result.data.title || '',
+                                                        date: result.data.date || '',
+                                                        time: result.data.time || '',
+                                                        location: result.data.location || '',
+                                                        parent: result.data.parent || APP_CONFIG.DEFAULT_PARENT,
+                                                        type: result.data.type || APP_CONFIG.DEFAULT_ACTIVITY_TYPE,
+                                                        activityCategory: result.data.activityCategory || APP_CONFIG.DEFAULT_CATEGORY,
+                                                        notes: result.data.notes || '',
+                                                        prepTasks: [],
+                                                        duration: APP_CONFIG.DEFAULT_DURATION,
+                                                        notify: false,
+                                                        recurring: 'none',
+                                                        createdBy: APP_CONFIG.DEFAULT_PARENT,
+                                                        familyCode: code
+                                                    };
+                                                    
+                                                    await db.collection('activities').add(newActivity);
+                                                    setShowNL(false);
+                                                    setNlText('');
+                                                    alert('✅ Activity added!\n\n' + result.data.title + ' for ' + matchingKid.name + '\n' + result.data.date + ' at ' + result.data.time);
+                                                    
+                                                } else if (result.action === 'edit') {
+                                                    if (!result.data.activityId) {
+                                                        alert('Could not find activity to edit');
+                                                        setNlLoading(false);
+                                                        return;
+                                                    }
+                                                    
+                                                    if (confirm('Edit this activity?\n\n' + result.data.activityDescription + '\n\nChanges: ' + JSON.stringify(result.data.changes, null, 2))) {
+                                                        const actRef = db.collection('activities').doc(result.data.activityId);
+                                                        await actRef.update(result.data.changes);
+                                                        setShowNL(false);
+                                                        setNlText('');
+                                                        alert('✅ Activity updated!');
+                                                    }
+                                                    
+                                                } else if (result.action === 'delete') {
+                                                    if (!result.data.activityId) {
+                                                        alert('Could not find activity to delete');
+                                                        setNlLoading(false);
+                                                        return;
+                                                    }
+                                                    
+                                                    if (confirm('Delete this activity?\n\n' + result.data.activityDescription)) {
+                                                        await db.collection('activities').doc(result.data.activityId).delete();
+                                                        setShowNL(false);
+                                                        setNlText('');
+                                                        alert('✅ Activity deleted!');
+                                                    }
+                                                }
+                                                
+                                            } catch (error) {
+                                                alert('Error: ' + error.message);
+                                            }
+                                            setNlLoading(false);
+                                        }} disabled={nlLoading} className="px-6 py-2 bg-blue-600 text-white rounded-lg">
+                                            {nlLoading ? '🔄 Processing...' : '✨ Execute'}
+                                        </button>
+                                        <button onClick={() => { setShowNL(false); setNlText(''); }} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="mb-8">
+                            <div className="flex justify-between mb-4">
+                                <h2 className="text-xl font-bold">Kids</h2>
+                                <button onClick={() => setShowKid(true)} className="px-4 py-2 bg-blue-500 text-white rounded-lg">+ Add</button>
+                            </div>
+                            <div className="flex gap-3 flex-wrap">
+                                {kids.map(k => (
+                                    <div key={k.id} className="flex items-center gap-2 px-4 py-2 rounded-full shadow-md" style={{ backgroundColor: k.color + '30' }}>
+                                        <span style={{ color: k.color }}>{k.name}</span>
+                                        <button onClick={() => delKid(k.id)} className="text-red-500">×</button>
+                                    </div>
+                                ))}
+                            </div>
+                            {showKid && (
+                                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                                    <input value={newKid.name} onChange={e => setNewKid({ ...newKid, name: e.target.value })} placeholder="Name" className="w-full px-4 py-2 border rounded mb-3" />
+                                    <div className="flex gap-2 mb-3">
+                                        {colors.map(c => (
+                                            <button key={c} onClick={() => setNewKid({ ...newKid, color: c })} className="w-8 h-8 rounded-full" style={{ backgroundColor: c, border: newKid.color === c ? '2px solid black' : 'none' }} />
+                                        ))}
+                                    </div>
+                                    <button onClick={addKid} className="px-4 py-2 bg-blue-500 text-white rounded mr-2">Add</button>
+                                    <button onClick={() => setShowKid(false)} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex gap-2 mb-4">
+                            <button onClick={() => setMainView('activities')} className={`px-4 py-2 rounded-lg ${mainView === 'activities' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Activities</button>
+                            <button onClick={() => setMainView('balance')} className={`px-4 py-2 rounded-lg ${mainView === 'balance' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Balance Dashboard</button>
+                        </div>
+
+                        {mainView === 'balance' ? (
+                            <div className="space-y-6">
+                                <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg">
+                                    <h3 className="text-2xl font-bold mb-4">📊 Parent Load Balance</h3>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <p className="text-sm font-semibold mb-2">Activities Created:</p>
+                                            <div className="flex gap-4">
+                                                <div>Mom: <span className="font-bold text-2xl">{parentLoad.created.Mom || 0}</span></div>
+                                                <div>Dad: <span className="font-bold text-2xl">{parentLoad.created.Dad || 0}</span></div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-semibold mb-2">Activities Assigned:</p>
+                                            <div className="flex gap-4">
+                                                <div>Mom: <span className="font-bold text-2xl">{parentLoad.balance.Mom || 0}</span></div>
+                                                <div>Dad: <span className="font-bold text-2xl">{parentLoad.balance.Dad || 0}</span></div>
+                                                <div>Both: <span className="font-bold text-2xl">{parentLoad.balance.Both || 0}</span></div>
+                                            </div>
+                                        </div>
+                                        {parentLoad.created.Mom > 0 || parentLoad.created.Dad > 0 ? (
+                                            <div className="mt-4 p-4 bg-white rounded-lg">
+                                                <p className="text-sm">
+                                                    {parentLoad.created.Mom > parentLoad.created.Dad * 2 ? 
+                                                        '💡 Dad: Help balance the mental load by creating more activities!' :
+                                                        parentLoad.created.Dad > parentLoad.created.Mom * 2 ?
+                                                        '💡 Mom: Help balance the mental load by creating more activities!' :
+                                                        '✅ Great balance on activity creation!'}
+                                                </p>
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                </div>
+
+                                <div className="bg-gradient-to-r from-blue-50 to-cyan-50 p-6 rounded-lg">
+                                    <h3 className="text-2xl font-bold mb-4">🎯 Activity Balance by Category</h3>
+                                    {Object.keys(categoryBalance).length === 0 ? (
+                                        <p className="text-gray-500">No activities yet</p>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {Object.entries(categoryBalance).map(([cat, data]) => (
+                                                <div key={cat} className="bg-white p-4 rounded-lg">
+                                                    <h4 className="font-bold text-lg mb-2">{cat}</h4>
+                                                    <p className="text-sm text-gray-600 mb-2">Total: {data.total}</p>
+                                                    <div className="flex gap-4">
+                                                        {Object.entries(data.byKid).map(([kidName, count]) => (
+                                                            <div key={kidName} className="text-sm">
+                                                                {kidName}: <span className="font-bold">{count}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <div>
+                                <div className="flex justify-between mb-4 flex-wrap gap-2">
+                                    <h2 className="text-xl font-bold">Activities</h2>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {view === 'list' && (
+                                            <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 border rounded bg-white">
+                                                <option value="none">No Grouping</option>
+                                                <option value="title">Group by Activity</option>
+                                                <option value="kid">Group by Kid</option>
+                                                <option value="type">Group by Type</option>
+                                                <option value="parent">Group by Parent</option>
+                                            </select>
+                                        )}
+                                        <button onClick={() => setView('list')} className={`px-3 py-2 rounded ${view === 'list' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>List</button>
+                                        <button onClick={() => setView('calendar')} className={`px-3 py-2 rounded ${view === 'calendar' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Calendar</button>
+                                        <button onClick={() => setShowRecommend(true)} className="px-4 py-2 bg-purple-500 text-white rounded-lg">🤖 AI Suggest</button>
+                                        <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add</button>
+                                    </div>
+                                </div>
+
+                                {showRecommend && (
+                                    <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border-2 border-purple-200">
+                                        <h3 className="font-bold text-xl mb-3 text-purple-800">🤖 AI Activity Recommendations</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                                            <input type="text" value={recLocation} onChange={e => setRecLocation(e.target.value)} placeholder="Location (e.g., Seattle, WA)" className="px-4 py-2 border rounded-lg" />
+                                            <input type="text" value={recPreferences} onChange={e => setRecPreferences(e.target.value)} placeholder="Preferences (optional)" className="px-4 py-2 border rounded-lg" />
+                                        </div>
+                                        <div className="flex gap-2 mb-4">
+                                            <button onClick={getRecommendations} disabled={recLoading} className="px-6 py-2 bg-purple-600 text-white rounded-lg">
+                                                {recLoading ? '🔄 Getting...' : '🤖 Get Recommendations'}
+                                            </button>
+                                            <button onClick={() => { setShowRecommend(false); setRecommendations([]); }} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
+                                        </div>
+
+                                        {recommendations.length > 0 && (
+                                            <div className="bg-white rounded-lg p-4 max-h-96 overflow-y-auto">
+                                                <h4 className="font-bold mb-3 text-lg">Suggested Activities:</h4>
+                                                <div className="space-y-3">
+                                                    {recommendations.map((rec, idx) => (
+                                                        <div key={idx} className="border rounded-lg p-4">
+                                                            <h5 className="font-bold text-purple-700 mb-1">{rec.title}</h5>
+                                                            <p className="text-sm text-gray-600 mb-1">{rec.venue}</p>
+                                                            {rec.websiteUrl && <a href={rec.websiteUrl} target="_blank" className="text-xs text-blue-600 hover:underline">🔗 Visit Website</a>}
+                                                            {rec.notes && <p className="text-sm text-gray-500 mb-2">{rec.notes}</p>}
+                                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                                {kids.map(kid => (
+                                                                    <button key={kid.id} onClick={() => addRecommendedActivity(rec, kid.id)} className="px-3 py-1 text-xs rounded-full text-white" style={{ backgroundColor: kid.color }}>
+                                                                        Add for {kid.name}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {showAct && (
+                                    <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <select value={newAct.kidId} onChange={e => setNewAct({ ...newAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
+                                                <option value="">Select Kid</option>
+                                                {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+                                            </select>
+                                            <input value={newAct.title} onChange={e => { setNewAct({ ...newAct, title: e.target.value }); getSuggestedPrepTasks(e.target.value); }} placeholder="Activity" className="px-4 py-2 border rounded" />
+                                            <input type="date" value={newAct.date} onChange={e => setNewAct({ ...newAct, date: e.target.value })} className="px-4 py-2 border rounded" />
+                                            <input type="time" value={newAct.time} onChange={e => setNewAct({ ...newAct, time: e.target.value })} className="px-4 py-2 border rounded" />
+                                            <input value={newAct.location} onChange={e => setNewAct({ ...newAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
+                                            <select value={newAct.parent} onChange={e => setNewAct({ ...newAct, parent: e.target.value })} className="px-4 py-2 border rounded">
+                                                <option>Mom</option>
+                                                <option>Dad</option>
+                                                <option>Both</option>
+                                            </select>
+                                            <select value={newAct.type} onChange={e => setNewAct({ ...newAct, type: e.target.value })} className="px-4 py-2 border rounded">
+                                                <option>Pick Up</option>
+                                                <option>Drop Off</option>
+                                                <option>Other</option>
+                                            </select>
+                                            <select value={newAct.activityCategory} onChange={e => setNewAct({ ...newAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
+                                                <option>Physical</option>
+                                                <option>Social</option>
+                                                <option>Creative</option>
+                                                <option>Academic</option>
+                                                <option>Other</option>
+                                            </select>
+                                            <select value={newAct.createdBy} onChange={e => setNewAct({ ...newAct, createdBy: e.target.value })} className="px-4 py-2 border rounded">
+                                                <option>Mom</option>
+                                                <option>Dad</option>
+                                            </select>
+                                            <select value={newAct.recurring} onChange={e => setNewAct({ ...newAct, recurring: e.target.value })} className="px-4 py-2 border rounded">
+                                                <option value="none">One-time</option>
+                                                <option value="daily">Daily</option>
+                                                <option value="weekly">Weekly</option>
+                                                <option value="biweekly">Bi-weekly</option>
+                                            </select>
+                                        </div>
+                                        
+                                        {loadingPrepTasks && <p className="text-sm text-gray-500 mt-3">AI suggesting prep tasks...</p>}
+                                        {suggestedPrepTasks.length > 0 && (
+                                            <div className="mt-3">
+                                                <p className="text-sm font-semibold mb-2">✨ AI Suggested Prep Tasks:</p>
+                                                <div className="space-y-1">
+                                                    {suggestedPrepTasks.map((task, idx) => (
+                                                        <label key={idx} className="flex items-center gap-2 text-sm">
+                                                            <input type="checkbox" checked={newAct.prepTasks.includes(task)} onChange={e => {
+                                                                if (e.target.checked) {
+                                                                    setNewAct({ ...newAct, prepTasks: [...newAct.prepTasks, task] });
+                                                                } else {
+                                                                    setNewAct({ ...newAct, prepTasks: newAct.prepTasks.filter(t => t !== task) });
+                                                                }
+                                                            }} />
+                                                            {task}
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <label className="flex items-center gap-2 mt-3">
+                                            <input type="checkbox" checked={newAct.notify} onChange={e => setNewAct({ ...newAct, notify: e.target.checked })} />
+                                            <span className="text-sm">🔔 Notify 30 min before</span>
+                                        </label>
+                                        
+                                        <textarea value={newAct.notes} onChange={e => setNewAct({ ...newAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded mt-3" rows="2"></textarea>
+                                        
+                                        <div className="flex gap-2 mt-3">
+                                            <button onClick={addAct} className="px-4 py-2 bg-green-500 text-white rounded">Add</button>
+                                            <button onClick={() => { setShowAct(false); setSuggestedPrepTasks([]); }} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-3">
+                                    {upcoming.length === 0 ? <p className="text-gray-500 text-center py-4">No upcoming activities</p> : upcoming.map(a => {
+                                        const kid = kids.find(k => k.id === a.kidId);
+                                        const isExpanded = expandedActivities[a.id];
+                                        return (
+                                            <div key={a.id} className="p-4 border-l-4 rounded shadow bg-white" style={{ borderLeftColor: kid?.color }}>
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 hover:text-gray-700">
+                                                                {isExpanded ? '▼' : '▶'}
+                                                            </button>
+                                                            <div>
+                                                                <h3 className="font-bold">
+                                                                    {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
+                                                                    {a.prepTasks?.length > 0 && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">+{a.prepTasks.length} tasks</span>}
+                                                                </h3>
+                                                                <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent}</p>
+                                                                
+                                                                {isExpanded && (
+                                                                    <div className="mt-2 p-3 bg-gray-50 rounded text-sm">
+                                                                        <p><strong>Location:</strong> {a.location || 'Not specified'}</p>
+                                                                        <p><strong>Category:</strong> {a.activityCategory || 'Other'}</p>
+                                                                        <p><strong>Created by:</strong> {a.createdBy || 'Unknown'}</p>
+                                                                        {a.notes && <p><strong>Notes:</strong> {a.notes}</p>}
+                                                                        {a.prepTasks?.length > 0 && (
+                                                                            <div className="mt-2">
+                                                                                <p className="font-semibold mb-1">Prep Tasks:</p>
+                                                                                <ul className="list-disc ml-5">
+                                                                                    {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
+                                                                                </ul>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => delAct(a.id)} className="text-red-500 text-xl ml-2">×</button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
