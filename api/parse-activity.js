@@ -23,7 +23,7 @@ module.exports = async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const kidsNames = kids.map(k => k.name).join(', ');
 
-    // Step 1: Determine the intent (add, edit, or delete)
+    // Step 1: Determine the intent (add, edit, delete, or query)
     const intentResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -37,7 +37,7 @@ module.exports = async (req, res) => {
             role: 'system',
             content: `Analyze the user's text and determine their intent. Respond with ONLY a JSON object in this exact format:
 {
-  "action": "add" | "edit" | "delete",
+  "action": "add" | "edit" | "delete" | "query",
   "confidence": "high" | "medium" | "low"
 }
 
@@ -45,14 +45,16 @@ Examples:
 - "Soccer for Emma tomorrow at 3pm" → {"action": "add", "confidence": "high"}
 - "Change Emma's soccer to 5pm" → {"action": "edit", "confidence": "high"}
 - "Delete Emma's soccer on Tuesday" → {"action": "delete", "confidence": "high"}
-- "Emma has piano on Friday" → {"action": "add", "confidence": "high"}
-- "Remove swimming" → {"action": "delete", "confidence": "medium"}
-- "Update dance class time" → {"action": "edit", "confidence": "high"}
+- "When is Emma's swim class?" → {"action": "query", "confidence": "high"}
+- "What activities does Emma have tomorrow?" → {"action": "query", "confidence": "high"}
+- "Do I have any pickups on Friday?" → {"action": "query", "confidence": "high"}
+- "What time is DD2's soccer?" → {"action": "query", "confidence": "high"}
 
 Look for keywords:
-- ADD: mentions activity, time, date without "change", "delete", "remove", "cancel"
+- ADD: mentions activity, time, date without "change", "delete", "remove", "cancel", or question words
 - EDIT: "change", "update", "move", "reschedule", "modify"
 - DELETE: "delete", "remove", "cancel", "drop"
+- QUERY: question words ("when", "what", "where", "who", "which", "do I have", "does", "is there", "show me")
 
 Respond with ONLY the JSON object, nothing else.`
           },
@@ -301,6 +303,131 @@ Respond ONLY with the JSON object, nothing else.`
           changes: matchResult.changes || {}
         },
         confidence: matchResult.confidence || intent.confidence
+      });
+    
+    } else if (intent.action === 'query') {
+      // Handle query - search through activities and return matching ones
+      const queryResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'system',
+              content: `You are helping to answer questions about activities.
+
+User's question: "${text}"
+
+Available activities:
+${activities.map((a, i) => {
+  const kid = kids.find(k => k.id === a.kidId);
+  return `${i + 1}. ${a.title} for ${kid?.name || 'Unknown'} on ${a.date} at ${a.time} (Location: ${a.location || 'Not specified'}, Type: ${a.type}, Parent: ${a.parent})`;
+}).join('\n')}
+
+Instructions:
+1. Find activities that match the user's question
+2. Consider kid names, activity names, dates, times, locations
+3. If asking "when", focus on date and time
+4. If asking "what", list relevant activities
+5. If asking about a specific kid (like "DD2"), match that kid
+6. Be specific and helpful
+
+Respond with JSON:
+{
+  "answer": "Natural language answer to their question",
+  "matchingActivities": [array of activity IDs that match],
+  "summary": "Brief one-line summary"
+}
+
+Examples:
+Question: "When is Emma's swim class?"
+Response: {
+  "answer": "Emma's swim class is on Friday, October 25th at 2:00 PM at Central Pool",
+  "matchingActivities": ["activity-id-123"],
+  "summary": "Friday, Oct 25 at 2:00 PM"
+}
+
+Question: "What does Emma have tomorrow?"
+Response: {
+  "answer": "Emma has 2 activities tomorrow: Soccer practice at 3:00 PM and Piano lesson at 4:00 PM",
+  "matchingActivities": ["id1", "id2"],
+  "summary": "2 activities: Soccer (3pm), Piano (4pm)"
+}
+
+Question: "Do I have any pickups on Friday?"
+Response: {
+  "answer": "Yes, you have 1 pickup on Friday: Emma's dance class at 5:30 PM",
+  "matchingActivities": ["id"],
+  "summary": "1 pickup on Friday"
+}
+
+If no matches found:
+{
+  "answer": "I couldn't find any activities matching your question.",
+  "matchingActivities": [],
+  "summary": "No matches found"
+}
+
+Respond ONLY with the JSON object, nothing else.`
+            },
+            {
+              role: 'user',
+              content: text
+            }
+          ],
+          temperature: 0.3
+        })
+      });
+
+      if (!queryResponse.ok) {
+        throw new Error(`OpenAI API error: ${queryResponse.statusText}`);
+      }
+
+      const queryData = await queryResponse.json();
+      const queryContent = queryData.choices[0].message.content;
+      
+      let queryResult;
+      try {
+        queryResult = JSON.parse(queryContent);
+      } catch (e) {
+        const jsonMatch = queryContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          queryResult = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('Could not parse query result');
+        }
+      }
+
+      // Get full activity details for matching activities
+      const matchingActivityDetails = activities
+        .filter(a => queryResult.matchingActivities.includes(a.id))
+        .map(a => {
+          const kid = kids.find(k => k.id === a.kidId);
+          return {
+            id: a.id,
+            title: a.title,
+            kidName: kid?.name || 'Unknown',
+            date: a.date,
+            time: a.time,
+            location: a.location,
+            parent: a.parent,
+            type: a.type
+          };
+        });
+
+      return res.status(200).json({
+        action: 'query',
+        data: {
+          answer: queryResult.answer,
+          summary: queryResult.summary,
+          activities: matchingActivityDetails,
+          count: matchingActivityDetails.length
+        },
+        confidence: intent.confidence
       });
     }
 
