@@ -47,6 +47,14 @@ const APP_CONFIG = {
         PRIMARY_COLOR: 'blue',  // Tailwind color name
         ACCENT_COLOR: 'purple',
         CALENDAR_VIEW_DEFAULT: 'month'  // 'day', 'week', 'month'
+    },
+    
+    // Google Calendar Integration
+    GOOGLE_CALENDAR: {
+        CLIENT_ID: '178041915921-mqkof44jajlrgi7i4u9s5bfdg5ebihss.apps.googleusercontent.com',
+        API_KEY: 'AIzaSyB7dFK-wqJCSy7RQsYKiOqjXSJPmCuUUyY',
+        SCOPES: 'https://www.googleapis.com/auth/calendar.readonly',
+        DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'
     }
 };
 
