@@ -136,17 +136,7 @@ const [tokenClient, setTokenClient] = useState(null);
                     setKids(s.docs.map(d => ({ id: d.id, ...d.data() })));
                     setLoading(false);
                 });
-                // Initialize Google Calendar API
-useEffect(() => {
-    if (typeof window.CalendarSync !== 'undefined') {
-        window.CalendarSync.initializeCalendarAPI(
-            APP_CONFIG,
-            setGapiInited,
-            setGisInited,
-            setTokenClient
-        );
-    }
-}, []);
+                
                 const unsub2 = db.collection('activities').where('familyCode', '==', code).onSnapshot(s => {
                     setActs(s.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
@@ -170,6 +160,18 @@ useEffect(() => {
 
                 return () => { unsub1(); unsub2(); clearInterval(interval); };
             }, [code, acts, kids]);
+
+            // Initialize Google Calendar API
+            useEffect(() => {
+                if (typeof window.CalendarSync !== 'undefined') {
+                    window.CalendarSync.initializeCalendarAPI(
+                        APP_CONFIG,
+                        setGapiInited,
+                        setGisInited,
+                        setTokenClient
+                    );
+                }
+            }, []);
 
             const addKid = async () => {
                 if (!newKid.name) return;
