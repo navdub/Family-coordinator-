@@ -10,9 +10,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<!-- Google Calendar API -->
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
     
-    <!-- App Configuration - Change backend URL here -->
-    <script src="config.js"></script>
+<script src="config.js"></script>
+<script src="calendar-functions.js"></script>
     
     <!-- API Service - All backend calls -->
     <script src="services/api.js"></script>
@@ -104,6 +108,13 @@
             const [recLoading, setRecLoading] = useState(false);
             const [suggestedPrepTasks, setSuggestedPrepTasks] = useState([]);
             const [loadingPrepTasks, setLoadingPrepTasks] = useState(false);
+            // Calendar sync states
+const [calendarConnected, setCalendarConnected] = useState(false);
+const [calendarSyncing, setCalendarSyncing] = useState(false);
+const [syncResult, setSyncResult] = useState(null);
+const [gapiInited, setGapiInited] = useState(false);
+const [gisInited, setGisInited] = useState(false);
+const [tokenClient, setTokenClient] = useState(null);
             const colors = ['#FF6B9D', '#4ECDC4', '#95E1D3', '#F38181', '#AA96DA'];
 
             const handleLogin = (c, n) => {
@@ -125,7 +136,17 @@
                     setKids(s.docs.map(d => ({ id: d.id, ...d.data() })));
                     setLoading(false);
                 });
-                
+                // Initialize Google Calendar API
+useEffect(() => {
+    if (typeof window.CalendarSync !== 'undefined') {
+        window.CalendarSync.initializeCalendarAPI(
+            APP_CONFIG,
+            setGapiInited,
+            setGisInited,
+            setTokenClient
+        );
+    }
+}, []);
                 const unsub2 = db.collection('activities').where('familyCode', '==', code).onSnapshot(s => {
                     setActs(s.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
@@ -263,6 +284,34 @@
             const toggleActivityExpanded = (id) => {
                 setExpandedActivities(prev => ({ ...prev, [id]: !prev[id] }));
             };
+// Calendar sync wrapper functions
+const handleConnectCalendar = () => {
+    window.CalendarSync.connectCalendar(
+        gapiInited,
+        gisInited,
+        tokenClient,
+        setCalendarConnected,
+        () => handleSyncCalendar()
+    );
+};
+
+const handleSyncCalendar = async () => {
+    await window.CalendarSync.syncCalendar(
+        gapiInited,
+        kids,
+        code,
+        db,
+        setCalendarSyncing,
+        setSyncResult
+    );
+};
+
+const handleDisconnectCalendar = () => {
+    window.CalendarSync.disconnectCalendar(
+        setCalendarConnected,
+        setSyncResult
+    );
+};
 
             const getBalanceByCategory = () => {
                 const cats = {};
@@ -561,6 +610,79 @@
                                     </div>
                                 ))}
                             </div>
+{/* Calendar Sync Section */}
+<div className="mb-8">
+    <div className="p-6 bg-gradient-to-r from-green-50 to-blue-50 rounded-xl shadow-lg border-2 border-green-200">
+        <div className="flex justify-between items-center mb-3">
+            <div>
+                <h2 className="text-2xl font-bold mb-1">📅 Calendar Sync</h2>
+                <p className="text-sm text-gray-600">
+                    Import activities from your Google Calendar automatically
+                </p>
+            </div>
+            {calendarConnected && (
+                <span className="px-3 py-1 bg-green-500 text-white text-sm rounded-full font-bold">
+                    ✅ Connected
+                </span>
+            )}
+        </div>
+        
+        {!calendarConnected ? (
+            <div>
+                <button 
+                    onClick={handleConnectCalendar}
+                    className="px-6 py-3 bg-green-500 text-white rounded-lg font-bold hover:bg-green-600 transition shadow-md"
+                >
+                    🔗 Connect Google Calendar
+                </button>
+                
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                    <p className="text-sm font-semibold mb-1">💡 Tip:</p>
+                    <p className="text-sm text-gray-600">
+                        For best results, include kid names in your calendar events.
+                        <br />
+                        Example: <strong>"Emma Soccer Practice"</strong> instead of just "Soccer"
+                    </p>
+                </div>
+            </div>
+        ) : (
+            <div className="space-y-3">
+                <div className="flex gap-2 flex-wrap">
+                    <button 
+                        onClick={handleSyncCalendar}
+                        disabled={calendarSyncing}
+                        className="px-6 py-3 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 disabled:opacity-50 transition shadow-md"
+                    >
+                        {calendarSyncing ? '🔄 Syncing...' : '🔄 Sync Now'}
+                    </button>
+                    <button 
+                        onClick={handleDisconnectCalendar}
+                        className="px-4 py-3 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
+                    >
+                        Disconnect
+                    </button>
+                </div>
+                
+                {syncResult && (
+                    <div className="p-4 bg-white rounded-lg border border-green-200">
+                        <p className="text-sm mb-1">
+                            <strong>Calendar events found:</strong> {syncResult.total}
+                        </p>
+                        <p className="text-sm text-green-600 mb-1">
+                            ✅ <strong>{syncResult.imported}</strong> activities imported
+                        </p>
+                        {syncResult.skipped > 0 && (
+                            <p className="text-sm text-orange-600">
+                                ⚠️ <strong>{syncResult.skipped}</strong> events skipped (no kid name found)
+                            </p>
+                        )}
+                    </div>
+                )}
+            </div>
+        )}
+    </div>
+</div>
+                            
                             {showKid && (
                                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                                     <input value={newKid.name} onChange={e => setNewKid({ ...newKid, name: e.target.value })} placeholder="Name" className="w-full px-4 py-2 border rounded mb-3" />
