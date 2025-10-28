@@ -87,195 +87,89 @@
             const [showAct, setShowAct] = useState(false);
             const [showCode, setShowCode] = useState(false);
             const [showPast, setShowPast] = useState(false);
-            const [showNL, setShowNL] = useState(true); // Always show Ask section by default
+            const [showNL, setShowNL] = useState(true);
             const [showRecommend, setShowRecommend] = useState(false);
-            const [editAct, setEditAct] = useState(null); // Track which activity is being edited
-            const [view, setView] = useState('list');
+            const [editAct, setEditAct] = useState(null);
+            const [view, setView] = useState('calendar'); // Changed default to calendar
             const [mainView, setMainView] = useState('activities');
             const [groupBy, setGroupBy] = useState('none');
             const [expandedGroups, setExpandedGroups] = useState({});
             const [expandedActivities, setExpandedActivities] = useState({});
+            const [showOtherWeeks, setShowOtherWeeks] = useState(false); // For collapsing other weeks
             const [newKid, setNewKid] = useState({ name: '', color: '#4ECDC4' });
             const [newAct, setNewAct] = useState({ 
-                kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60,
-                type: 'Pick Up', notify: false, recurring: 'none', prepTasks: [], activityCategory: 'Physical', createdBy: 'Mom'
+                title: '', date: '', time: '', location: '', parent: 'Mom', kidId: '', 
+                type: 'Pick Up', activityCategory: 'Physical', notes: '', notify: false, createdBy: 'Parent' 
             });
-            const [nlText, setNlText] = useState('');
+            const [nlInput, setNlInput] = useState('');
             const [nlLoading, setNlLoading] = useState(false);
-            const [recLocation, setRecLocation] = useState('');
-            const [recPreferences, setRecPreferences] = useState('');
+            const [nlResult, setNlResult] = useState(null);
             const [recommendations, setRecommendations] = useState([]);
             const [recLoading, setRecLoading] = useState(false);
-            const [suggestedPrepTasks, setSuggestedPrepTasks] = useState([]);
-            const [loadingPrepTasks, setLoadingPrepTasks] = useState(false);
-            // Calendar sync states
-const [calendarConnected, setCalendarConnected] = useState(false);
-const [calendarSyncing, setCalendarSyncing] = useState(false);
-const [syncResult, setSyncResult] = useState(null);
-const [gapiInited, setGapiInited] = useState(false);
-const [gisInited, setGisInited] = useState(false);
-const [tokenClient, setTokenClient] = useState(null);
-            const colors = ['#FF6B9D', '#4ECDC4', '#95E1D3', '#F38181', '#AA96DA'];
-
-            const handleLogin = (c, n) => {
-                setCode(c);
-                setName(n);
-                localStorage.setItem('familyCode', c);
-                localStorage.setItem('familyName', n);
-            };
-
-            const logout = () => {
-                localStorage.clear();
-                setCode(null);
-            };
 
             useEffect(() => {
-                if (!code) return setLoading(false);
-                
-                const unsub1 = db.collection('kids').where('familyCode', '==', code).onSnapshot(s => {
-                    setKids(s.docs.map(d => ({ id: d.id, ...d.data() })));
+                if (!code) return;
+                const unsub = db.collection('families').doc(code).collection('kids').onSnapshot(snap => {
+                    setKids(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                });
+                return unsub;
+            }, [code]);
+
+            useEffect(() => {
+                if (!code) return;
+                const unsub = db.collection('families').doc(code).collection('activities').onSnapshot(snap => {
+                    setActs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                     setLoading(false);
                 });
-                
-                const unsub2 = db.collection('activities').where('familyCode', '==', code).onSnapshot(s => {
-                    setActs(s.docs.map(d => ({ id: d.id, ...d.data() })));
-                });
-
-                const interval = setInterval(() => {
-                    const now = new Date();
-                    acts.forEach(a => {
-                        if (!a.notify || !a.time) return;
-                        const actTime = new Date(`${a.date}T${a.time}`);
-                        const diff = actTime - now;
-                        if (diff > 1740000 && diff < 1800000) {
-                            const kid = kids.find(k => k.id === a.kidId);
-                            if ('Notification' in window && Notification.permission === 'granted') {
-                                new Notification(`Upcoming: ${a.title}`, {
-                                    body: `${kid?.name} - ${a.type} in 30 min at ${a.location}`
-                                });
-                            }
-                        }
-                    });
-                }, 60000);
-
-                return () => { unsub1(); unsub2(); clearInterval(interval); };
-            }, [code, acts, kids]);
-
-            // Initialize Google Calendar API
-            useEffect(() => {
-                if (typeof window.CalendarSync !== 'undefined') {
-                    window.CalendarSync.initializeCalendarAPI(
-                        APP_CONFIG,
-                        setGapiInited,
-                        setGisInited,
-                        setTokenClient
-                    );
-                }
-            }, []);
+                return unsub;
+            }, [code]);
 
             const addKid = async () => {
                 if (!newKid.name) return;
-                await db.collection('kids').add({ ...newKid, familyCode: code });
+                await db.collection('families').doc(code).collection('kids').add(newKid);
                 setNewKid({ name: '', color: '#4ECDC4' });
                 setShowKid(false);
             };
 
-            const delKid = async (id) => {
-                const kid = kids.find(k => k.id === id);
-                const kidActs = acts.filter(a => a.kidId === id);
-                if (!confirm(`Delete ${kid?.name}? This will also delete ${kidActs.length} activities.`)) return;
-                await db.collection('kids').doc(id).delete();
-                const snap = await db.collection('activities').where('kidId', '==', id).get();
-                snap.forEach(d => d.ref.delete());
-            };
-
-            const getSuggestedPrepTasks = async (title) => {
-                if (!title || title.length < 3) return;
-                setLoadingPrepTasks(true);
-                try {
-                    const response = await fetch('/api/suggest-prep-tasks', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ activityTitle: title })
-                    });
-                    if (response.ok) {
-                        const data = await response.json();
-                        setSuggestedPrepTasks(data.tasks || []);
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                }
-                setLoadingPrepTasks(false);
-            };
-
             const addAct = async () => {
-                if (!newAct.title || !newAct.kidId || !newAct.date) return;
-
-                if (newAct.recurring !== 'none') {
-                    const startDate = new Date(newAct.date);
-                    const interval = newAct.recurring === 'daily' ? 1 : newAct.recurring === 'weekly' ? 7 : 14;
-                    const count = newAct.recurring === 'daily' ? 30 : 12;
-
-                    for (let i = 0; i < count; i++) {
-                        const d = new Date(startDate);
-                        d.setDate(d.getDate() + (interval * i));
-                        await db.collection('activities').add({
-                            ...newAct,
-                            date: d.toISOString().split('T')[0],
-                            familyCode: code,
-                            recurringId: Date.now()
-                        });
-                    }
-                } else {
-                    await db.collection('activities').add({ ...newAct, familyCode: code });
-                }
-
-                if (newAct.notify && 'Notification' in window) {
-                    Notification.requestPermission();
-                }
-
+                if (!newAct.title || !newAct.date || !newAct.kidId) return;
+                await db.collection('families').doc(code).collection('activities').add(newAct);
                 setNewAct({ 
-                    kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60,
-                    type: 'Pick Up', notify: false, recurring: 'none', prepTasks: [], activityCategory: 'Physical', createdBy: 'Mom'
+                    title: '', date: '', time: '', location: '', parent: 'Mom', kidId: '', 
+                    type: 'Pick Up', activityCategory: 'Physical', notes: '', notify: false, createdBy: 'Parent' 
                 });
-                setSuggestedPrepTasks([]);
                 setShowAct(false);
             };
 
-            const delAct = async (id) => {
-                const a = acts.find(act => act.id === id);
-                const kid = kids.find(k => k.id === a?.kidId);
-                if (!confirm(`Delete ${a?.title} - ${kid?.name} on ${a?.date}?`)) return;
-                await db.collection('activities').doc(id).delete();
+            const delKid = async id => {
+                if (confirm('Delete this kid and all activities?')) {
+                    await db.collection('families').doc(code).collection('kids').doc(id).delete();
+                    const actSnap = await db.collection('families').doc(code).collection('activities').where('kidId', '==', id).get();
+                    actSnap.docs.forEach(d => d.ref.delete());
+                }
+            };
+
+            const delAct = async id => {
+                if (confirm('Delete activity?')) {
+                    await db.collection('families').doc(code).collection('activities').doc(id).delete();
+                }
+            };
+
+            const logout = () => {
+                localStorage.removeItem('familyCode');
+                localStorage.removeItem('familyName');
+                setCode(null);
+                setName(null);
             };
 
             const startEdit = (activity) => {
-                setEditAct({ 
-                    id: activity.id,
-                    kidId: activity.kidId,
-                    title: activity.title,
-                    date: activity.date,
-                    time: activity.time,
-                    location: activity.location || '',
-                    parent: activity.parent,
-                    type: activity.type,
-                    activityCategory: activity.activityCategory || 'Physical',
-                    notes: activity.notes || '',
-                    prepTasks: activity.prepTasks || [],
-                    duration: activity.duration || 60,
-                    notify: activity.notify || false,
-                    recurring: activity.recurring || 'none',
-                    createdBy: activity.createdBy || 'Mom'
-                });
+                setEditAct({ ...activity });
             };
 
             const saveEdit = async () => {
-                if (!editAct.kidId || !editAct.title || !editAct.date || !editAct.time) {
-                    return alert('Please fill required fields');
-                }
-                
-                const { id, ...updates } = editAct;
-                await db.collection('activities').doc(id).update(updates);
+                if (!editAct.id) return;
+                const { id, ...data } = editAct;
+                await db.collection('families').doc(code).collection('activities').doc(id).update(data);
                 setEditAct(null);
             };
 
@@ -283,878 +177,735 @@ const [tokenClient, setTokenClient] = useState(null);
                 setEditAct(null);
             };
 
-            const toggleActivityExpanded = (id) => {
-                setExpandedActivities(prev => ({ ...prev, [id]: !prev[id] }));
-            };
-// Calendar sync wrapper functions
-const handleConnectCalendar = () => {
-    window.CalendarSync.connectCalendar(
-        gapiInited,
-        gisInited,
-        tokenClient,
-        setCalendarConnected,
-        () => handleSyncCalendar()
-    );
-};
-
-const handleSyncCalendar = async () => {
-    await window.CalendarSync.syncCalendar(
-        gapiInited,
-        kids,
-        code,
-        db,
-        setCalendarSyncing,
-        setSyncResult
-    );
-};
-
-const handleDisconnectCalendar = () => {
-    window.CalendarSync.disconnectCalendar(
-        setCalendarConnected,
-        setSyncResult
-    );
-};
-
-            const getBalanceByCategory = () => {
-                const cats = {};
-                acts.forEach(a => {
-                    const cat = a.activityCategory || 'Other';
-                    if (!cats[cat]) cats[cat] = { total: 0, byKid: {} };
-                    cats[cat].total++;
-                    const kid = kids.find(k => k.id === a.kidId);
-                    if (kid) {
-                        cats[cat].byKid[kid.name] = (cats[cat].byKid[kid.name] || 0) + 1;
-                    }
-                });
-                return cats;
+            const toggleActivityExpanded = (activityId) => {
+                setExpandedActivities(prev => ({
+                    ...prev,
+                    [activityId]: !prev[activityId]
+                }));
             };
 
-            const getParentLoadBalance = () => {
-                const balance = { Mom: 0, Dad: 0, Both: 0 };
-                const created = { Mom: 0, Dad: 0 };
-                
-                acts.forEach(a => {
-                    balance[a.parent] = (balance[a.parent] || 0) + 1;
-                    if (a.createdBy) created[a.createdBy] = (created[a.createdBy] || 0) + 1;
-                });
+            const parseNL = async () => {
+                if (!nlInput.trim()) return;
+                setNlLoading(true);
+                try {
+                    const result = await window.parseActivity(nlInput);
+                    setNlResult(result);
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                }
+                setNlLoading(false);
+            };
 
-                return { balance, created };
+            const applyNL = () => {
+                if (nlResult) {
+                    setNewAct({ ...newAct, ...nlResult });
+                    setNlInput('');
+                    setNlResult(null);
+                    setShowAct(true);
+                }
             };
 
             const getRecommendations = async () => {
-                if (!recLocation.trim()) return alert('Enter location');
                 setRecLoading(true);
-                setRecommendations([]);
                 try {
-                    const response = await fetch('/api/recommend-activities', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ location: recLocation, kids, preferences: recPreferences })
-                    });
-                    if (response.ok) {
-                        const data = await response.json();
-                        setRecommendations(data.recommendations || []);
-                    } else {
-                        const error = await response.json();
-                        alert('Error: ' + error.error);
-                    }
+                    const recs = await window.recommendActivities(kids, acts);
+                    setRecommendations(recs);
                 } catch (error) {
                     alert('Error: ' + error.message);
                 }
                 setRecLoading(false);
             };
 
-            const addRecommendedActivity = (rec, kidId) => {
-                setNewAct({
-                    kidId, title: rec.title, date: new Date().toISOString().split('T')[0], time: '', location: rec.venue || '',
-                    parent: 'Mom', notes: rec.notes || '', duration: rec.duration || 60, type: rec.type || 'Other',
-                    notify: false, recurring: 'none', prepTasks: [], activityCategory: rec.category || 'Physical', createdBy: 'Mom'
-                });
-                setShowRecommend(false);
-                setShowAct(true);
-            };
-
-            if (!code) return <LoginScreen onLogin={handleLogin} />;
-            if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-xl">Loading...</div></div>;
-
-            const today = new Date().toISOString().split('T')[0];
-            const upcoming = acts.filter(a => a.date >= today).sort((a, b) => a.date.localeCompare(b.date));
-            const past = acts.filter(a => a.date < today).sort((a, b) => b.date.localeCompare(a.date));
-            const categoryBalance = getBalanceByCategory();
-            const parentLoad = getParentLoadBalance();
-
-            // Group activities based on selected groupBy option
-            const getGroupedActivities = (activities) => {
-                console.log('🔍 Grouping Debug:', { groupBy, activityCount: activities.length });
+            const getPrepTasks = async (activityId) => {
+                const activity = acts.find(a => a.id === activityId);
+                if (!activity) return;
                 
-                if (groupBy === 'none') {
-                    return { 'All Activities': activities };
+                try {
+                    const tasks = await window.suggestPrepTasks(activity);
+                    await db.collection('families').doc(code).collection('activities').doc(activityId).update({
+                        prepTasks: tasks
+                    });
+                } catch (error) {
+                    alert('Error getting prep tasks: ' + error.message);
                 }
-
-                const grouped = {};
-                
-                activities.forEach(activity => {
-                    let groupKey;
-                    
-                    switch(groupBy) {
-                        case 'kid':
-                            const kid = kids.find(k => k.id === activity.kidId);
-                            groupKey = kid ? kid.name : 'Unknown Kid';
-                            break;
-                        case 'title':
-                            groupKey = activity.title || 'Untitled';
-                            break;
-                        case 'type':
-                            groupKey = activity.type || 'Other';
-                            break;
-                        case 'parent':
-                            groupKey = activity.parent || 'Unassigned';
-                            break;
-                        default:
-                            groupKey = 'All Activities';
-                    }
-                    
-                    if (!grouped[groupKey]) {
-                        grouped[groupKey] = [];
-                    }
-                    grouped[groupKey].push(activity);
-                });
-                
-                // Sort activities within each group
-                Object.keys(grouped).forEach(key => {
-                    grouped[key].sort((a, b) => a.date.localeCompare(b.date));
-                });
-                
-                console.log('✅ Grouped result:', { groupCount: Object.keys(grouped).length, groups: Object.keys(grouped) });
-                return grouped;
             };
 
-            const groupedUpcoming = getGroupedActivities(upcoming);
-            const groupNames = Object.keys(groupedUpcoming).sort();
-            
-            console.log('📊 Display Info:', { view, groupBy, groupNames });
+            // Helper function to get start of week (Monday)
+            const getWeekStart = (date) => {
+                const d = new Date(date);
+                const day = d.getDay();
+                const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                return new Date(d.setDate(diff));
+            };
+
+            // Helper function to get week range string
+            const getWeekRange = (weekStart) => {
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 6);
+                const formatDate = (d) => {
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    return `${months[d.getMonth()]} ${d.getDate()}`;
+                };
+                return `${formatDate(weekStart)} - ${formatDate(weekEnd)}`;
+            };
+
+            // Group activities by week
+            const getActivitiesByWeek = () => {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const currentWeekStart = getWeekStart(today);
+                
+                const weekMap = {};
+                
+                acts.forEach(act => {
+                    const actDate = new Date(act.date);
+                    const weekStart = getWeekStart(actDate);
+                    const weekKey = weekStart.toISOString().split('T')[0];
+                    
+                    if (!weekMap[weekKey]) {
+                        weekMap[weekKey] = {
+                            weekStart,
+                            activities: [],
+                            isCurrent: weekStart.getTime() === currentWeekStart.getTime()
+                        };
+                    }
+                    weekMap[weekKey].activities.push(act);
+                });
+
+                // Sort weeks
+                const sortedWeeks = Object.values(weekMap).sort((a, b) => 
+                    a.weekStart.getTime() - b.weekStart.getTime()
+                );
+
+                return sortedWeeks;
+            };
+
+            // Get activities for a specific day
+            const getActivitiesForDay = (date, activities) => {
+                const dateStr = date.toISOString().split('T')[0];
+                return activities.filter(act => act.date === dateStr).sort((a, b) => {
+                    if (!a.time) return 1;
+                    if (!b.time) return -1;
+                    return a.time.localeCompare(b.time);
+                });
+            };
+
+            if (!code) return <LoginScreen onLogin={(c, n) => { setCode(c); setName(n); localStorage.setItem('familyCode', c); localStorage.setItem('familyName', n); }} />;
+
+            const todayActs = acts.filter(a => a.date === new Date().toISOString().split('T')[0]);
+            const upcomingActs = acts.filter(a => a.date > new Date().toISOString().split('T')[0]);
 
             return (
-                <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
-                    <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h1 className="text-3xl font-bold">{name}</h1>
-                            <div className="flex gap-2">
-                                <button onClick={() => setShowCode(true)} className="px-4 py-2 bg-purple-100 rounded-lg">Share</button>
-                                <button onClick={logout} className="px-4 py-2 bg-gray-100 rounded-lg">Logout</button>
-                            </div>
-                        </div>      
-                        
-                            {showCode && (
-                            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                                <div className="bg-white rounded-2xl p-8 max-w-md">
-                                    <h2 className="text-2xl font-bold mb-4">Family Code</h2>
-                                    <div className="bg-purple-50 p-4 rounded-lg mb-4">
-                                        <p className="text-3xl font-mono text-center text-purple-600">{code}</p>
-                                    </div>
-                                    <button onClick={() => { navigator.clipboard.writeText(code); alert('Copied!'); }} className="w-full bg-purple-600 text-white py-3 rounded-lg mb-2">Copy</button>
-                                    <button onClick={() => setShowCode(false)} className="w-full bg-gray-200 py-3 rounded-lg">Close</button>
-                                </div>
-                            </div>
-                        )}
-<div className="mb-6 p-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl shadow-lg">
-                            <div className="flex justify-between items-center mb-3">
+                <div className="min-h-screen bg-gray-50">
+                    <div className="bg-gradient-to-r from-purple-600 to-blue-500 text-white shadow-lg">
+                        <div className="max-w-6xl mx-auto px-6 py-6">
+                            <div className="flex justify-between items-center">
                                 <div>
-                                    <h2 className="text-2xl font-bold text-white mb-1">💬 Ask</h2>
-                                    <p className="text-blue-100 text-sm">Add, edit, or delete activities or just ask a question about activities</p>
+                                    <h1 className="text-3xl font-bold">{name} Activities</h1>
+                                    <p className="text-purple-100">Code: {code}</p>
                                 </div>
-                                <button onClick={() => setShowNL(!showNL)} className="px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg font-bold hover:bg-opacity-30 transition">
-                                    {showNL ? '▼ Minimize' : '▶ Expand'}
-                                </button>
-                            </div>  
-{showNL && (
-    <div className="mb-8 p-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg text-white">
-        <div className="flex justify-between items-center mb-4">
-            <div className="flex items-center gap-2">
-                <span className="text-2xl">💬</span>
-                <h2 className="text-2xl font-bold">Ask</h2>
-            </div>
-            <button 
-                onClick={() => setShowNL(false)}
-                className="px-3 py-1 bg-white/20 rounded-lg hover:bg-white/30 transition text-sm"
-            >
-                Minimize
-            </button>
-        </div>
-        
-        <p className="mb-4 text-white/90 text-sm">
-            Add, edit, or delete activities or just ask a question about activities
-        </p>
-        
-        <textarea
-            value={nlText}
-            onChange={e => setNlText(e.target.value)}
-            placeholder="Type what you want to do or ask a question..."
-            className="w-full p-4 rounded-lg border-2 border-white/30 bg-white/10 text-white placeholder-white/60 focus:outline-none focus:border-white/60 transition mb-4"
-            rows={3}
-            onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                    handleNL();
-                }
-            }}
-        />
-        
-        <div className="flex gap-2">
-            <button
-                onClick={async () => {
-                    if (!nlText.trim()) return alert('Please type something');
-                    setNlLoading(true);
-                    try {
-                        const result = await APIService.parseActivity(nlText, kids, acts);
-                        
-                        if (result.action === 'add') {
-                            const matchingKid = kids.find(k => k.id === result.data.kidId);
-                            
-                            if (!matchingKid) {
-                                alert('Kid not found. Available: ' + kids.map(k => k.name).join(', '));
-                                setNlLoading(false);
-                                return;
-                            }
-                            
-                            const newActivity = {
-                                kidId: result.data.kidId,
-                                title: result.data.title || '',
-                                date: result.data.date || '',
-                                time: result.data.time || '',
-                                location: result.data.location || '',
-                                parent: result.data.parent || APP_CONFIG.DEFAULT_PARENT,
-                                type: result.data.type || APP_CONFIG.DEFAULT_ACTIVITY_TYPE,
-                                activityCategory: result.data.activityCategory || APP_CONFIG.DEFAULT_CATEGORY,
-                                notes: result.data.notes || '',
-                                prepTasks: [],
-                                duration: APP_CONFIG.DEFAULT_DURATION,
-                                notify: false,
-                                recurring: 'none',
-                                createdBy: APP_CONFIG.DEFAULT_PARENT,
-                                familyCode: code
-                            };
-                            
-                            await db.collection('activities').add(newActivity);
-                            setShowNL(false);
-                            setNlText('');
-                            alert('✅ Activity added!\n\n' + result.data.title + ' for ' + matchingKid.name + '\n' + result.data.date + ' at ' + result.data.time);
-                            
-                        } else if (result.action === 'edit') {
-                            if (!result.data.activityId) {
-                                alert('Could not find activity to edit');
-                                setNlLoading(false);
-                                return;
-                            }
-                            
-                            if (confirm('Edit this activity?\n\n' + result.data.activityDescription + '\n\nChanges: ' + JSON.stringify(result.data.changes, null, 2))) {
-                                const actRef = db.collection('activities').doc(result.data.activityId);
-                                await actRef.update(result.data.changes);
-                                setShowNL(false);
-                                setNlText('');
-                                alert('✅ Activity updated!');
-                            }
-                            
-                        } else if (result.action === 'delete') {
-                            if (!result.data.activityId) {
-                                alert('Could not find activity to delete');
-                                setNlLoading(false);
-                                return;
-                            }
-                            
-                            if (confirm('Delete this activity?\n\n' + result.data.activityDescription)) {
-                                await db.collection('activities').doc(result.data.activityId).delete();
-                                setShowNL(false);
-                                setNlText('');
-                                alert('✅ Activity deleted!');
-                            }
-                            
-                        } else if (result.action === 'query') {
-                            const data = result.data;
-                            
-                            if (data.count === 0) {
-                                alert('🔍 ' + data.answer);
-                            } else {
-                                let message = '🔍 ' + data.answer + '\n\n';
-                                message += '📋 Details:\n';
-                                data.activities.forEach((act, i) => {
-                                    message += '\n' + (i + 1) + '. ' + act.title + ' - ' + act.kidName + '\n';
-                                    message += '   📅 ' + act.date + ' at ' + act.time + '\n';
-                                    if (act.location) message += '   📍 ' + act.location + '\n';
-                                    message += '   👤 ' + act.parent + ' (' + act.type + ')';
-                                    if (i < data.activities.length - 1) message += '\n';
-                                });
-                                
-                                alert(message);
-                            }
-                            
-                            setShowNL(false);
-                            setNlText('');
-                        }
-                        
-                    } catch (error) {
-                        alert('Error: ' + error.message);
-                    }
-                    setNlLoading(false);
-                }}
-                disabled={!nlText.trim() || nlLoading}
-                className="flex-1 px-6 py-3 bg-white text-blue-600 rounded-lg font-bold hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-md flex items-center justify-center gap-2"
-            >
-                {nlLoading ? (
-                    <>
-                        <span className="inline-block animate-spin">⚙️</span>
-                        Processing...
-                    </>
-                ) : (
-                    <>✨ Execute</>
-                )}
-            </button>
-            <button
-                onClick={() => setNlText('')}
-                className="px-4 py-3 bg-white/20 rounded-lg hover:bg-white/30 transition"
-            >
-                Clear
-            </button>
-        </div>
-        
-        <p className="mt-3 text-xs text-white/70 text-center">
-            💡 Tip: Press ⌘+Enter (or Ctrl+Enter) to execute quickly
-        </p>
-    </div>
-)}
+                                <button onClick={logout} className="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold">Logout</button>
+                            </div>
                         </div>
-
-                        <div className="mb-8">
-                            <div className="flex justify-between mb-4">
-                                <h2 className="text-xl font-bold">Kids</h2>
-                                <button onClick={() => setShowKid(true)} className="px-4 py-2 bg-blue-500 text-white rounded-lg">+ Add</button>
-                            </div>
-                            <div className="flex gap-3 flex-wrap">
-                                {kids.map(k => (
-                                    <div key={k.id} className="flex items-center gap-2 px-4 py-2 rounded-full shadow-md" style={{ backgroundColor: k.color + '30' }}>
-                                        <span style={{ color: k.color }}>{k.name}</span>
-                                        <button onClick={() => delKid(k.id)} className="text-red-500">×</button>
-                                    </div>
-                                ))}
-                            </div>
-{/* Calendar Sync Section */}
-<div className="mb-8">
-    <div className="p-6 bg-gradient-to-r from-green-50 to-blue-50 rounded-xl shadow-lg border-2 border-green-200">
-        <div className="flex justify-between items-center mb-3">
-            <div>
-                <h2 className="text-2xl font-bold mb-1">📅 Calendar Sync</h2>
-                <p className="text-sm text-gray-600">
-                    Import activities from your Google Calendar automatically
-                </p>
-            </div>
-            {calendarConnected && (
-                <span className="px-3 py-1 bg-green-500 text-white text-sm rounded-full font-bold">
-                    ✅ Connected
-                </span>
-            )}
-        </div>
-        
-        {!calendarConnected ? (
-            <div>
-                <button 
-                    onClick={handleConnectCalendar}
-                    className="px-6 py-3 bg-green-500 text-white rounded-lg font-bold hover:bg-green-600 transition shadow-md"
-                >
-                    🔗 Connect Google Calendar
-                </button>
-                
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                    <p className="text-sm font-semibold mb-1">💡 Tip:</p>
-                    <p className="text-sm text-gray-600">
-                        For best results, include kid names in your calendar events.
-                        <br />
-                        Example: <strong>"Emma Soccer Practice"</strong> instead of just "Soccer"
-                    </p>
-                </div>
-            </div>
-        ) : (
-            <div className="space-y-3">
-                <div className="flex gap-2 flex-wrap">
-                    <button 
-                        onClick={handleSyncCalendar}
-                        disabled={calendarSyncing}
-                        className="px-6 py-3 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 disabled:opacity-50 transition shadow-md"
-                    >
-                        {calendarSyncing ? '🔄 Syncing...' : '🔄 Sync Now'}
-                    </button>
-                    <button 
-                        onClick={handleDisconnectCalendar}
-                        className="px-4 py-3 bg-gray-200 rounded-lg hover:bg-gray-300 transition"
-                    >
-                        Disconnect
-                    </button>
-                </div>
-                
-                {syncResult && (
-                    <div className="p-4 bg-white rounded-lg border border-green-200">
-                        <p className="text-sm mb-1">
-                            <strong>Calendar events found:</strong> {syncResult.total}
-                        </p>
-                        <p className="text-sm text-green-600 mb-1">
-                            ✅ <strong>{syncResult.imported}</strong> activities imported
-                        </p>
-                        {syncResult.skipped > 0 && (
-                            <p className="text-sm text-orange-600">
-                                ⚠️ <strong>{syncResult.skipped}</strong> events skipped (no kid name found)
-                            </p>
-                        )}
                     </div>
-                )}
-            </div>
-        )}
-    </div>
-</div>
-                            
-                            {showKid && (
-                                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                                    <input value={newKid.name} onChange={e => setNewKid({ ...newKid, name: e.target.value })} placeholder="Name" className="w-full px-4 py-2 border rounded mb-3" />
-                                    <div className="flex gap-2 mb-3">
-                                        {colors.map(c => (
-                                            <button key={c} onClick={() => setNewKid({ ...newKid, color: c })} className="w-8 h-8 rounded-full" style={{ backgroundColor: c, border: newKid.color === c ? '2px solid black' : 'none' }} />
-                                        ))}
-                                    </div>
-                                    <button onClick={addKid} className="px-4 py-2 bg-blue-500 text-white rounded mr-2">Add</button>
-                                    <button onClick={() => setShowKid(false)} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
-                                </div>
-                            )}
+
+                    <div className="max-w-6xl mx-auto p-6">
+                        {/* Main Navigation Tabs */}
+                        <div className="flex gap-4 mb-6">
+                            <button onClick={() => setMainView('activities')} className={`px-6 py-3 rounded-lg font-semibold ${mainView === 'activities' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700'}`}>
+                                📅 Activities
+                            </button>
+                            <button onClick={() => setMainView('kids')} className={`px-6 py-3 rounded-lg font-semibold ${mainView === 'kids' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700'}`}>
+                                👶 Kids
+                            </button>
                         </div>
 
-                        <div className="flex gap-2 mb-4">
-                            <button onClick={() => setMainView('activities')} className={`px-4 py-2 rounded-lg ${mainView === 'activities' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Activities</button>
-                            <button onClick={() => setMainView('balance')} className={`px-4 py-2 rounded-lg ${mainView === 'balance' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Balance Dashboard</button>
-                        </div>
-
-                        {mainView === 'balance' ? (
-                            <div className="space-y-6">
-                                <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg">
-                                    <h3 className="text-2xl font-bold mb-4">📊 Parent Load Balance</h3>
-                                    <div className="space-y-4">
-                                        <div>
-                                            <p className="text-sm font-semibold mb-2">Activities Created:</p>
-                                            <div className="flex gap-4">
-                                                <div>Mom: <span className="font-bold text-2xl">{parentLoad.created.Mom || 0}</span></div>
-                                                <div>Dad: <span className="font-bold text-2xl">{parentLoad.created.Dad || 0}</span></div>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-semibold mb-2">Activities Assigned:</p>
-                                            <div className="flex gap-4">
-                                                <div>Mom: <span className="font-bold text-2xl">{parentLoad.balance.Mom || 0}</span></div>
-                                                <div>Dad: <span className="font-bold text-2xl">{parentLoad.balance.Dad || 0}</span></div>
-                                                <div>Both: <span className="font-bold text-2xl">{parentLoad.balance.Both || 0}</span></div>
-                                            </div>
-                                        </div>
-                                        {parentLoad.created.Mom > 0 || parentLoad.created.Dad > 0 ? (
-                                            <div className="mt-4 p-4 bg-white rounded-lg">
-                                                <p className="text-sm">
-                                                    {parentLoad.created.Mom > parentLoad.created.Dad * 2 ? 
-                                                        '💡 Dad: Help balance the mental load by creating more activities!' :
-                                                        parentLoad.created.Dad > parentLoad.created.Mom * 2 ?
-                                                        '💡 Mom: Help balance the mental load by creating more activities!' :
-                                                        '✅ Great balance on activity creation!'}
-                                                </p>
-                                            </div>
-                                        ) : null}
-                                    </div>
+                        {mainView === 'kids' ? (
+                            <div className="bg-white rounded-xl shadow-md p-6">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-2xl font-bold">Kids</h2>
+                                    <button onClick={() => setShowKid(!showKid)} className="bg-green-500 text-white px-4 py-2 rounded-lg">+ Add Kid</button>
                                 </div>
 
-                                <div className="bg-gradient-to-r from-blue-50 to-cyan-50 p-6 rounded-lg">
-                                    <h3 className="text-2xl font-bold mb-4">🎯 Activity Balance by Category</h3>
-                                    {Object.keys(categoryBalance).length === 0 ? (
-                                        <p className="text-gray-500">No activities yet</p>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            {Object.entries(categoryBalance).map(([cat, data]) => (
-                                                <div key={cat} className="bg-white p-4 rounded-lg">
-                                                    <h4 className="font-bold text-lg mb-2">{cat}</h4>
-                                                    <p className="text-sm text-gray-600 mb-2">Total: {data.total}</p>
-                                                    <div className="flex gap-4">
-                                                        {Object.entries(data.byKid).map(([kidName, count]) => (
-                                                            <div key={kidName} className="text-sm">
-                                                                {kidName}: <span className="font-bold">{count}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            ))}
+                                {showKid && (
+                                    <div className="mb-6 p-4 border-2 border-green-200 rounded-lg bg-green-50">
+                                        <h3 className="font-bold mb-2">New Kid</h3>
+                                        <div className="flex gap-2">
+                                            <input value={newKid.name} onChange={e => setNewKid({ ...newKid, name: e.target.value })} placeholder="Name" className="flex-1 px-4 py-2 border rounded" />
+                                            <input type="color" value={newKid.color} onChange={e => setNewKid({ ...newKid, color: e.target.value })} className="w-16 h-10" />
+                                            <button onClick={addKid} className="bg-green-500 text-white px-4 py-2 rounded">Add</button>
                                         </div>
-                                    )}
+                                    </div>
+                                )}
+
+                                <div className="space-y-4">
+                                    {kids.map(k => (
+                                        <div key={k.id} className="p-4 border-2 rounded-lg flex justify-between items-center" style={{ borderColor: k.color }}>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-12 h-12 rounded-full" style={{ backgroundColor: k.color }}></div>
+                                                <span className="text-xl font-bold">{k.name}</span>
+                                            </div>
+                                            <button onClick={() => delKid(k.id)} className="text-red-500 text-2xl">×</button>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         ) : (
                             <div>
-                                <div className="flex justify-between mb-4 flex-wrap gap-2">
-                                    <h2 className="text-xl font-bold">Activities</h2>
-                                    <div className="flex gap-2 flex-wrap">
-                                        {view === 'list' && (
-                                            <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 border rounded bg-white">
-                                                <option value="none">No Grouping</option>
-                                                <option value="title">Group by Activity</option>
-                                                <option value="kid">Group by Kid</option>
-                                                <option value="type">Group by Type</option>
-                                                <option value="parent">Group by Parent</option>
-                                            </select>
-                                        )}
-                                        <button onClick={() => setView('list')} className={`px-3 py-2 rounded ${view === 'list' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>List</button>
-                                        <button onClick={() => setView('calendar')} className={`px-3 py-2 rounded ${view === 'calendar' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}>Calendar</button>
-                                        <button onClick={() => setShowRecommend(true)} className="px-4 py-2 bg-purple-500 text-white rounded-lg">🤖 AI Suggest</button>
-                                        <button onClick={() => setShowAct(true)} className="px-4 py-2 bg-green-500 text-white rounded-lg">+ Add</button>
-                                    </div>
-                                </div>
+                                {/* Ask Section */}
+                                <div className="mb-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl shadow-md p-6 border-2 border-blue-200">
+                                    <button onClick={() => setShowNL(!showNL)} className="text-xl font-bold mb-4 flex items-center gap-2 w-full">
+                                        <span>{showNL ? '▼' : '▶'}</span>
+                                        <span>🤖 Ask me to add activities</span>
+                                    </button>
+                                    
+                                    {showNL && (
+                                        <div className="space-y-4">
+                                            <div>
+                                                <p className="text-sm text-gray-600 mb-2">Try: "Soccer practice for Alex tomorrow at 3pm at City Field"</p>
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        value={nlInput} 
+                                                        onChange={e => setNlInput(e.target.value)} 
+                                                        placeholder="Describe the activity..." 
+                                                        className="flex-1 px-4 py-3 border-2 border-blue-300 rounded-lg"
+                                                        onKeyPress={e => e.key === 'Enter' && parseNL()}
+                                                    />
+                                                    <button onClick={parseNL} disabled={nlLoading} className="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold disabled:bg-gray-300">
+                                                        {nlLoading ? '...' : 'Parse'}
+                                                    </button>
+                                                </div>
+                                            </div>
 
-                                {showRecommend && (
-                                    <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border-2 border-purple-200">
-                                        <h3 className="font-bold text-xl mb-3 text-purple-800">🤖 AI Activity Recommendations</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-                                            <input type="text" value={recLocation} onChange={e => setRecLocation(e.target.value)} placeholder="Location (e.g., Seattle, WA)" className="px-4 py-2 border rounded-lg" />
-                                            <input type="text" value={recPreferences} onChange={e => setRecPreferences(e.target.value)} placeholder="Preferences (optional)" className="px-4 py-2 border rounded-lg" />
-                                        </div>
-                                        <div className="flex gap-2 mb-4">
-                                            <button onClick={getRecommendations} disabled={recLoading} className="px-6 py-2 bg-purple-600 text-white rounded-lg">
-                                                {recLoading ? '🔄 Getting...' : '🤖 Get Recommendations'}
-                                            </button>
-                                            <button onClick={() => { setShowRecommend(false); setRecommendations([]); }} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
-                                        </div>
+                                            {nlResult && (
+                                                <div className="p-4 bg-white rounded-lg border-2 border-green-300">
+                                                    <h4 className="font-bold text-green-700 mb-2">✓ Parsed Result:</h4>
+                                                    <div className="text-sm space-y-1 mb-3">
+                                                        <p><strong>Activity:</strong> {nlResult.title}</p>
+                                                        <p><strong>Date:</strong> {nlResult.date}</p>
+                                                        <p><strong>Time:</strong> {nlResult.time || 'Not specified'}</p>
+                                                        <p><strong>Location:</strong> {nlResult.location || 'Not specified'}</p>
+                                                    </div>
+                                                    <button onClick={applyNL} className="bg-green-500 text-white px-4 py-2 rounded-lg">
+                                                        ✓ Use This & Open Form
+                                                    </button>
+                                                </div>
+                                            )}
 
-                                        {recommendations.length > 0 && (
-                                            <div className="bg-white rounded-lg p-4 max-h-96 overflow-y-auto">
-                                                <h4 className="font-bold mb-3 text-lg">Suggested Activities:</h4>
-                                                <div className="space-y-3">
-                                                    {recommendations.map((rec, idx) => (
-                                                        <div key={idx} className="border rounded-lg p-4">
-                                                            <h5 className="font-bold text-purple-700 mb-1">{rec.title}</h5>
-                                                            <p className="text-sm text-gray-600 mb-1">{rec.venue}</p>
-                                                            {rec.websiteUrl && <a href={rec.websiteUrl} target="_blank" className="text-xs text-blue-600 hover:underline">🔗 Visit Website</a>}
-                                                            {rec.notes && <p className="text-sm text-gray-500 mb-2">{rec.notes}</p>}
-                                                            <div className="flex flex-wrap gap-2 mt-2">
-                                                                {kids.map(kid => (
-                                                                    <button key={kid.id} onClick={() => addRecommendedActivity(rec, kid.id)} className="px-3 py-1 text-xs rounded-full text-white" style={{ backgroundColor: kid.color }}>
-                                                                        Add for {kid.name}
-                                                                    </button>
+                                            <div className="pt-4 border-t-2 border-blue-200">
+                                                <button onClick={() => setShowRecommend(!showRecommend)} className="font-semibold text-blue-700 mb-2 flex items-center gap-2">
+                                                    <span>{showRecommend ? '▼' : '▶'}</span>
+                                                    <span>💡 Get Activity Recommendations</span>
+                                                </button>
+                                                
+                                                {showRecommend && (
+                                                    <div className="space-y-2">
+                                                        <button onClick={getRecommendations} disabled={recLoading} className="bg-purple-500 text-white px-4 py-2 rounded-lg disabled:bg-gray-300">
+                                                            {recLoading ? 'Loading...' : 'Generate Recommendations'}
+                                                        </button>
+                                                        
+                                                        {recommendations.length > 0 && (
+                                                            <div className="space-y-2 mt-2">
+                                                                {recommendations.map((rec, idx) => (
+                                                                    <div key={idx} className="p-3 bg-white rounded border-l-4 border-purple-500">
+                                                                        <p className="font-semibold">{rec.activity}</p>
+                                                                        <p className="text-sm text-gray-600">{rec.reason}</p>
+                                                                    </div>
                                                                 ))}
                                                             </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {showAct && (
-                                    <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <select value={newAct.kidId} onChange={e => setNewAct({ ...newAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option value="">Select Kid</option>
-                                                {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
-                                            </select>
-                                            <input value={newAct.title} onChange={e => { setNewAct({ ...newAct, title: e.target.value }); getSuggestedPrepTasks(e.target.value); }} placeholder="Activity" className="px-4 py-2 border rounded" />
-                                            <input type="date" value={newAct.date} onChange={e => setNewAct({ ...newAct, date: e.target.value })} className="px-4 py-2 border rounded" />
-                                            <input type="time" value={newAct.time} onChange={e => setNewAct({ ...newAct, time: e.target.value })} className="px-4 py-2 border rounded" />
-                                            <input value={newAct.location} onChange={e => setNewAct({ ...newAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
-                                            <select value={newAct.parent} onChange={e => setNewAct({ ...newAct, parent: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option>Mom</option>
-                                                <option>Dad</option>
-                                                <option>Both</option>
-                                            </select>
-                                            <select value={newAct.type} onChange={e => setNewAct({ ...newAct, type: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option>Pick Up</option>
-                                                <option>Drop Off</option>
-                                                <option>Other</option>
-                                            </select>
-                                            <select value={newAct.activityCategory} onChange={e => setNewAct({ ...newAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option>Physical</option>
-                                                <option>Social</option>
-                                                <option>Creative</option>
-                                                <option>Academic</option>
-                                                <option>Other</option>
-                                            </select>
-                                            <select value={newAct.createdBy} onChange={e => setNewAct({ ...newAct, createdBy: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option>Mom</option>
-                                                <option>Dad</option>
-                                            </select>
-                                            <select value={newAct.recurring} onChange={e => setNewAct({ ...newAct, recurring: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option value="none">One-time</option>
-                                                <option value="daily">Daily</option>
-                                                <option value="weekly">Weekly</option>
-                                                <option value="biweekly">Bi-weekly</option>
-                                            </select>
-                                        </div>
-                                        
-                                        {loadingPrepTasks && <p className="text-sm text-gray-500 mt-3">AI suggesting prep tasks...</p>}
-                                        {suggestedPrepTasks.length > 0 && (
-                                            <div className="mt-3">
-                                                <p className="text-sm font-semibold mb-2">✨ AI Suggested Prep Tasks:</p>
-                                                <div className="space-y-1">
-                                                    {suggestedPrepTasks.map((task, idx) => (
-                                                        <label key={idx} className="flex items-center gap-2 text-sm">
-                                                            <input type="checkbox" checked={newAct.prepTasks.includes(task)} onChange={e => {
-                                                                if (e.target.checked) {
-                                                                    setNewAct({ ...newAct, prepTasks: [...newAct.prepTasks, task] });
-                                                                } else {
-                                                                    setNewAct({ ...newAct, prepTasks: newAct.prepTasks.filter(t => t !== task) });
-                                                                }
-                                                            }} />
-                                                            {task}
-                                                        </label>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        <label className="flex items-center gap-2 mt-3">
-                                            <input type="checkbox" checked={newAct.notify} onChange={e => setNewAct({ ...newAct, notify: e.target.checked })} />
-                                            <span className="text-sm">🔔 Notify 30 min before</span>
-                                        </label>
-                                        
-                                        <textarea value={newAct.notes} onChange={e => setNewAct({ ...newAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded mt-3" rows="2"></textarea>
-                                        
-                                        <div className="flex gap-2 mt-3">
-                                            <button onClick={addAct} className="px-4 py-2 bg-green-500 text-white rounded">Add</button>
-                                            <button onClick={() => { setShowAct(false); setSuggestedPrepTasks([]); }} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {view === 'list' ? (
-                                    // List view with grouping options
-                                    <>
-                                        {groupBy === 'none' ? (
-                                            // Simple list view (no grouping)
-                                            <div className="space-y-3">
-                                                {upcoming.length === 0 ? <p className="text-gray-500 text-center py-4">No upcoming activities</p> : upcoming.map(a => {
-                                            const kid = kids.find(k => k.id === a.kidId);
-                                            const isExpanded = expandedActivities[a.id];
-                                            const isEditing = editAct?.id === a.id;
-                                            return (
-                                                <div key={a.id} className="p-4 border-l-4 rounded shadow bg-white" style={{ borderLeftColor: kid?.color }}>
-                                                    {isEditing ? (
-                                                        // Edit mode
-                                                        <div className="space-y-3">
-                                                            <h3 className="font-bold text-lg mb-3">✏️ Edit Activity</h3>
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                                <select value={editAct.kidId} onChange={e => setEditAct({ ...editAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
-                                                                    <option value="">Select Kid</option>
-                                                                    {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
-                                                                </select>
-                                                                <input value={editAct.title} onChange={e => setEditAct({ ...editAct, title: e.target.value })} placeholder="Activity" className="px-4 py-2 border rounded" />
-                                                                <input type="date" value={editAct.date} onChange={e => setEditAct({ ...editAct, date: e.target.value })} className="px-4 py-2 border rounded" />
-                                                                <input type="time" value={editAct.time} onChange={e => setEditAct({ ...editAct, time: e.target.value })} className="px-4 py-2 border rounded" />
-                                                                <input value={editAct.location} onChange={e => setEditAct({ ...editAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
-                                                                <select value={editAct.parent} onChange={e => setEditAct({ ...editAct, parent: e.target.value })} className="px-4 py-2 border rounded">
-                                                                    <option>Mom</option>
-                                                                    <option>Dad</option>
-                                                                    <option>Both</option>
-                                                                </select>
-                                                                <select value={editAct.type} onChange={e => setEditAct({ ...editAct, type: e.target.value })} className="px-4 py-2 border rounded">
-                                                                    <option>Pick Up</option>
-                                                                    <option>Drop Off</option>
-                                                                    <option>Other</option>
-                                                                </select>
-                                                                <select value={editAct.activityCategory} onChange={e => setEditAct({ ...editAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
-                                                                    <option>Physical</option>
-                                                                    <option>Social</option>
-                                                                    <option>Creative</option>
-                                                                    <option>Academic</option>
-                                                                    <option>Other</option>
-                                                                </select>
-                                                            </div>
-                                                            <textarea value={editAct.notes} onChange={e => setEditAct({ ...editAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded" rows="2" />
-                                                            <div className="flex gap-2">
-                                                                <button onClick={saveEdit} className="px-4 py-2 bg-green-500 text-white rounded">💾 Save</button>
-                                                                <button onClick={cancelEdit} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
-                                                            </div>
-                                                        </div>
-                                                    ) : (
-                                                        // View mode
-                                                        <div className="flex justify-between items-start">
-                                                            <div className="flex-1">
-                                                                <div className="flex items-center gap-2">
-                                                                    <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 hover:text-gray-700">
-                                                                        {isExpanded ? '▼' : '▶'}
-                                                                    </button>
-                                                                    <div>
-                                                                        <h3 className="font-bold">
-                                                                            {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
-                                                                            {a.prepTasks?.length > 0 && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">+{a.prepTasks.length} tasks</span>}
-                                                                        </h3>
-                                                                        <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent}</p>
-                                                                        
-                                                                        {isExpanded && (
-                                                                            <div className="mt-2 p-3 bg-gray-50 rounded text-sm">
-                                                                                <p><strong>Location:</strong> {a.location || 'Not specified'}</p>
-                                                                                <p><strong>Category:</strong> {a.activityCategory || 'Other'}</p>
-                                                                                <p><strong>Created by:</strong> {a.createdBy || 'Unknown'}</p>
-                                                                                {a.notes && <p><strong>Notes:</strong> {a.notes}</p>}
-                                                                                {a.prepTasks?.length > 0 && (
-                                                                                    <div className="mt-2">
-                                                                                        <p className="font-semibold mb-1">Prep Tasks:</p>
-                                                                                        <ul className="list-disc ml-5">
-                                                                                            {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
-                                                                                        </ul>
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex gap-2">
-                                                                <button onClick={() => startEdit(a)} className="text-blue-500 text-xl hover:text-blue-700" title="Edit">✏️</button>
-                                                                <button onClick={() => delAct(a.id)} className="text-red-500 text-xl hover:text-red-700" title="Delete">×</button>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    // Grouped card view
-                                    <div className="space-y-4">
-                                        {groupNames.map(groupName => {
-                                            const groupActivities = groupedUpcoming[groupName];
-                                            const isGroupExpanded = expandedGroups[groupName];
-                                            const groupKid = groupBy === 'kid' ? kids.find(k => k.name === groupName) : null;
-                                            
-                                            return (
-                                                <div key={groupName} className="border-2 rounded-lg overflow-hidden shadow-lg" style={{ borderColor: groupKid?.color || '#e5e7eb' }}>
-                                                    {/* Group Header - Clickable Card */}
-                                                    <div 
-                                                        onClick={() => setExpandedGroups(prev => ({ ...prev, [groupName]: !prev[groupName] }))}
-                                                        className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                                                        style={{ backgroundColor: groupKid ? groupKid.color + '20' : '#f9fafb' }}
-                                                    >
-                                                        <div className="flex justify-between items-center">
-                                                            <div className="flex items-center gap-3">
-                                                                <span className="text-2xl">{isGroupExpanded ? '▼' : '▶'}</span>
-                                                                <div>
-                                                                    <h3 className="text-xl font-bold" style={{ color: groupKid?.color || '#1f2937' }}>
-                                                                        {groupName}
-                                                                    </h3>
-                                                                    <p className="text-sm text-gray-600">
-                                                                        {groupActivities.length} {groupActivities.length === 1 ? 'activity' : 'activities'}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <p className="text-sm text-gray-500">
-                                                                    {groupActivities[0]?.date} - {groupActivities[groupActivities.length - 1]?.date}
-                                                                </p>
-                                                            </div>
-                                                        </div>
+                                                        )}
                                                     </div>
-                                                    
-                                                    {/* Group Activities - Shown when expanded */}
-                                                    {isGroupExpanded && (
-                                                        <div className="p-4 bg-white space-y-3 border-t-2" style={{ borderTopColor: groupKid?.color || '#e5e7eb' }}>
-                                                            {groupActivities.map(a => {
-                                                                const kid = kids.find(k => k.id === a.kidId);
-                                                                const isExpanded = expandedActivities[a.id];
-                                                                const isEditing = editAct?.id === a.id;
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Activities Section */}
+                                <div className="bg-white rounded-xl shadow-md p-6">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h2 className="text-2xl font-bold">Activities</h2>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setView('list')} className={`px-4 py-2 rounded ${view === 'list' ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>
+                                                📋 List
+                                            </button>
+                                            <button onClick={() => setView('calendar')} className={`px-4 py-2 rounded ${view === 'calendar' ? 'bg-purple-600 text-white' : 'bg-gray-200'}`}>
+                                                📅 Calendar
+                                            </button>
+                                            <button onClick={() => setShowAct(!showAct)} className="bg-blue-500 text-white px-4 py-2 rounded-lg">+ Add Activity</button>
+                                        </div>
+                                    </div>
+
+                                    {showAct && (
+                                        <div className="mb-6 p-4 border-2 border-blue-200 rounded-lg bg-blue-50">
+                                            <h3 className="font-bold mb-2">New Activity</h3>
+                                            <div className="grid grid-cols-2 gap-2 mb-2">
+                                                <input value={newAct.title} onChange={e => setNewAct({ ...newAct, title: e.target.value })} placeholder="Activity" className="px-4 py-2 border rounded" />
+                                                <select value={newAct.kidId} onChange={e => setNewAct({ ...newAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
+                                                    <option value="">Select Kid</option>
+                                                    {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+                                                </select>
+                                                <input type="date" value={newAct.date} onChange={e => setNewAct({ ...newAct, date: e.target.value })} className="px-4 py-2 border rounded" />
+                                                <input type="time" value={newAct.time} onChange={e => setNewAct({ ...newAct, time: e.target.value })} className="px-4 py-2 border rounded" />
+                                                <input value={newAct.location} onChange={e => setNewAct({ ...newAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
+                                                <select value={newAct.parent} onChange={e => setNewAct({ ...newAct, parent: e.target.value })} className="px-4 py-2 border rounded">
+                                                    <option>Mom</option>
+                                                    <option>Dad</option>
+                                                    <option>Both</option>
+                                                </select>
+                                                <select value={newAct.type} onChange={e => setNewAct({ ...newAct, type: e.target.value })} className="px-4 py-2 border rounded">
+                                                    <option>Pick Up</option>
+                                                    <option>Drop Off</option>
+                                                    <option>Other</option>
+                                                </select>
+                                                <select value={newAct.activityCategory} onChange={e => setNewAct({ ...newAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
+                                                    <option>Physical</option>
+                                                    <option>Social</option>
+                                                    <option>Creative</option>
+                                                    <option>Academic</option>
+                                                    <option>Other</option>
+                                                </select>
+                                            </div>
+                                            <textarea value={newAct.notes} onChange={e => setNewAct({ ...newAct, notes: e.target.value })} placeholder="Notes (optional)" className="w-full px-4 py-2 border rounded mb-2" rows="2" />
+                                            <div className="flex gap-2 items-center mb-2">
+                                                <label className="flex items-center gap-2">
+                                                    <input type="checkbox" checked={newAct.notify} onChange={e => setNewAct({ ...newAct, notify: e.target.checked })} />
+                                                    <span>Notify me</span>
+                                                </label>
+                                            </div>
+                                            <button onClick={addAct} className="bg-blue-500 text-white px-4 py-2 rounded">Add Activity</button>
+                                        </div>
+                                    )}
+
+                                    {loading ? (
+                                        <p className="text-center text-gray-500">Loading...</p>
+                                    ) : view === 'calendar' ? (
+                                        // Calendar View - Default
+                                        <div className="space-y-6">
+                                            {(() => {
+                                                const weekGroups = getActivitiesByWeek();
+                                                const currentWeek = weekGroups.find(w => w.isCurrent);
+                                                const otherWeeks = weekGroups.filter(w => !w.isCurrent);
+
+                                                return (
+                                                    <>
+                                                        {/* Current Week - Always Expanded */}
+                                                        {currentWeek && (
+                                                            <div className="border-2 border-purple-500 rounded-lg p-4 bg-purple-50">
+                                                                <h3 className="text-xl font-bold mb-4 text-purple-700">
+                                                                    📅 This Week ({getWeekRange(currentWeek.weekStart)})
+                                                                </h3>
                                                                 
-                                                                return (
-                                                                    <div key={a.id} className="p-4 border-l-4 rounded shadow-sm bg-gray-50" style={{ borderLeftColor: kid?.color }}>
-                                                                        {isEditing ? (
-                                                                            // Edit mode
-                                                                            <div className="space-y-3">
-                                                                                <h3 className="font-bold text-lg mb-3">✏️ Edit Activity</h3>
-                                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                                                    <select value={editAct.kidId} onChange={e => setEditAct({ ...editAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
-                                                                                        <option value="">Select Kid</option>
-                                                                                        {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
-                                                                                    </select>
-                                                                                    <input value={editAct.title} onChange={e => setEditAct({ ...editAct, title: e.target.value })} placeholder="Activity" className="px-4 py-2 border rounded" />
-                                                                                    <input type="date" value={editAct.date} onChange={e => setEditAct({ ...editAct, date: e.target.value })} className="px-4 py-2 border rounded" />
-                                                                                    <input type="time" value={editAct.time} onChange={e => setEditAct({ ...editAct, time: e.target.value })} className="px-4 py-2 border rounded" />
-                                                                                    <input value={editAct.location} onChange={e => setEditAct({ ...editAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
-                                                                                    <select value={editAct.parent} onChange={e => setEditAct({ ...editAct, parent: e.target.value })} className="px-4 py-2 border rounded">
-                                                                                        <option>Mom</option>
-                                                                                        <option>Dad</option>
-                                                                                        <option>Both</option>
-                                                                                    </select>
-                                                                                    <select value={editAct.type} onChange={e => setEditAct({ ...editAct, type: e.target.value })} className="px-4 py-2 border rounded">
-                                                                                        <option>Pick Up</option>
-                                                                                        <option>Drop Off</option>
-                                                                                        <option>Other</option>
-                                                                                    </select>
-                                                                                    <select value={editAct.activityCategory} onChange={e => setEditAct({ ...editAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
-                                                                                        <option>Physical</option>
-                                                                                        <option>Social</option>
-                                                                                        <option>Creative</option>
-                                                                                        <option>Academic</option>
-                                                                                        <option>Other</option>
-                                                                                    </select>
+                                                                <div className="grid grid-cols-7 gap-2">
+                                                                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, idx) => {
+                                                                        const date = new Date(currentWeek.weekStart);
+                                                                        date.setDate(date.getDate() + idx);
+                                                                        const dayActivities = getActivitiesForDay(date, currentWeek.activities);
+                                                                        const isToday = date.toDateString() === new Date().toDateString();
+
+                                                                        return (
+                                                                            <div key={idx} className={`p-2 rounded-lg min-h-32 ${isToday ? 'bg-yellow-100 border-2 border-yellow-400' : 'bg-white border border-gray-200'}`}>
+                                                                                <div className="font-bold text-sm mb-2 text-center">
+                                                                                    {day}
+                                                                                    <div className="text-xs text-gray-600">{date.getDate()}</div>
+                                                                                    {isToday && <div className="text-xs text-yellow-700 font-semibold">TODAY</div>}
                                                                                 </div>
-                                                                                <textarea value={editAct.notes} onChange={e => setEditAct({ ...editAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded" rows="2" />
-                                                                                <div className="flex gap-2">
-                                                                                    <button onClick={saveEdit} className="px-4 py-2 bg-green-500 text-white rounded">💾 Save</button>
-                                                                                    <button onClick={cancelEdit} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                                                                                
+                                                                                <div className="space-y-1">
+                                                                                    {dayActivities.map(a => {
+                                                                                        const kid = kids.find(k => k.id === a.kidId);
+                                                                                        const isExpanded = expandedActivities[a.id];
+                                                                                        
+                                                                                        return (
+                                                                                            <div key={a.id} className="text-xs p-2 rounded bg-white shadow-sm border-l-4" style={{ borderLeftColor: kid?.color || '#ccc' }}>
+                                                                                                {editAct?.id === a.id ? (
+                                                                                                    // Edit mode
+                                                                                                    <div className="space-y-2">
+                                                                                                        <input value={editAct.title} onChange={e => setEditAct({ ...editAct, title: e.target.value })} className="w-full px-2 py-1 border rounded text-xs" />
+                                                                                                        <input type="time" value={editAct.time} onChange={e => setEditAct({ ...editAct, time: e.target.value })} className="w-full px-2 py-1 border rounded text-xs" />
+                                                                                                        <div className="flex gap-1">
+                                                                                                            <button onClick={saveEdit} className="flex-1 px-2 py-1 bg-green-500 text-white rounded text-xs">Save</button>
+                                                                                                            <button onClick={cancelEdit} className="flex-1 px-2 py-1 bg-gray-300 rounded text-xs">Cancel</button>
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                ) : (
+                                                                                                    <>
+                                                                                                        <div className="flex justify-between items-start mb-1">
+                                                                                                            <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 text-xs">
+                                                                                                                {isExpanded ? '▼' : '▶'}
+                                                                                                            </button>
+                                                                                                            <div className="flex gap-1">
+                                                                                                                <button onClick={() => startEdit(a)} className="text-blue-500 hover:text-blue-700" title="Edit">✏️</button>
+                                                                                                                <button onClick={() => delAct(a.id)} className="text-red-500 hover:text-red-700" title="Delete">×</button>
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                        <div className="font-semibold">{a.notify && '🔔 '}{a.title}</div>
+                                                                                                        <div style={{ color: kid?.color }} className="font-semibold">{kid?.name}</div>
+                                                                                                        <div className="text-gray-600">{a.time || 'No time'}</div>
+                                                                                                        <div className="text-gray-600">{a.type}</div>
+                                                                                                        
+                                                                                                        {isExpanded && (
+                                                                                                            <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
+                                                                                                                <div><strong>Location:</strong> {a.location || 'N/A'}</div>
+                                                                                                                <div><strong>Parent:</strong> {a.parent}</div>
+                                                                                                                <div><strong>Category:</strong> {a.activityCategory}</div>
+                                                                                                                {a.notes && <div><strong>Notes:</strong> {a.notes}</div>}
+                                                                                                                {a.prepTasks?.length > 0 && (
+                                                                                                                    <div>
+                                                                                                                        <strong>Prep Tasks:</strong>
+                                                                                                                        <ul className="list-disc ml-3 mt-1">
+                                                                                                                            {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
+                                                                                                                        </ul>
+                                                                                                                    </div>
+                                                                                                                )}
+                                                                                                                {(!a.prepTasks || a.prepTasks.length === 0) && (
+                                                                                                                    <button onClick={() => getPrepTasks(a.id)} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded mt-1">
+                                                                                                                        Get Prep Tasks
+                                                                                                                    </button>
+                                                                                                                )}
+                                                                                                            </div>
+                                                                                                        )}
+                                                                                                    </>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        );
+                                                                                    })}
                                                                                 </div>
                                                                             </div>
-                                                                        ) : (
-                                                                            // View mode
-                                                                            <div className="flex justify-between items-start">
-                                                                                <div className="flex-1">
-                                                                                    <div className="flex items-center gap-2">
-                                                                                        <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 hover:text-gray-700">
-                                                                                            {isExpanded ? '▼' : '▶'}
-                                                                                        </button>
-                                                                                        <div>
-                                                                                            <h3 className="font-bold">
-                                                                                                {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
-                                                                                                {a.prepTasks?.length > 0 && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">+{a.prepTasks.length} tasks</span>}
-                                                                                            </h3>
-                                                                                            <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent}</p>
-                                                                                            
-                                                                                            {isExpanded && (
-                                                                                                <div className="mt-2 p-3 bg-white rounded text-sm">
-                                                                                                    <p><strong>Location:</strong> {a.location || 'Not specified'}</p>
-                                                                                                    <p><strong>Category:</strong> {a.activityCategory || 'Other'}</p>
-                                                                                                    <p><strong>Created by:</strong> {a.createdBy || 'Unknown'}</p>
-                                                                                                    {a.notes && <p><strong>Notes:</strong> {a.notes}</p>}
-                                                                                                    {a.prepTasks?.length > 0 && (
-                                                                                                        <div className="mt-2">
-                                                                                                            <p className="font-semibold mb-1">Prep Tasks:</p>
-                                                                                                            <ul className="list-disc ml-5">
-                                                                                                                {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
-                                                                                                            </ul>
-                                                                                                        </div>
-                                                                                                    )}
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Other Weeks - Collapsible */}
+                                                        {otherWeeks.length > 0 && (
+                                                            <div className="border-2 border-gray-300 rounded-lg p-4 bg-gray-50">
+                                                                <button 
+                                                                    onClick={() => setShowOtherWeeks(!showOtherWeeks)}
+                                                                    className="w-full text-left text-xl font-bold mb-2 flex items-center gap-2 text-gray-700"
+                                                                >
+                                                                    <span>{showOtherWeeks ? '▼' : '▶'}</span>
+                                                                    <span>📆 See Other Weeks ({otherWeeks.length} weeks)</span>
+                                                                </button>
+                                                                
+                                                                {showOtherWeeks && (
+                                                                    <div className="space-y-6 mt-4">
+                                                                        {otherWeeks.map((week, weekIdx) => (
+                                                                            <div key={weekIdx} className="border border-gray-300 rounded-lg p-4 bg-white">
+                                                                                <h4 className="text-lg font-bold mb-4 text-gray-700">
+                                                                                    Week of {getWeekRange(week.weekStart)}
+                                                                                </h4>
+                                                                                
+                                                                                <div className="grid grid-cols-7 gap-2">
+                                                                                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, idx) => {
+                                                                                        const date = new Date(week.weekStart);
+                                                                                        date.setDate(date.getDate() + idx);
+                                                                                        const dayActivities = getActivitiesForDay(date, week.activities);
+
+                                                                                        return (
+                                                                                            <div key={idx} className="p-2 rounded-lg min-h-32 bg-gray-50 border border-gray-200">
+                                                                                                <div className="font-bold text-sm mb-2 text-center">
+                                                                                                    {day}
+                                                                                                    <div className="text-xs text-gray-600">{date.getDate()}</div>
                                                                                                 </div>
-                                                                                            )}
-                                                                                        </div>
+                                                                                                
+                                                                                                <div className="space-y-1">
+                                                                                                    {dayActivities.map(a => {
+                                                                                                        const kid = kids.find(k => k.id === a.kidId);
+                                                                                                        const isExpanded = expandedActivities[a.id];
+                                                                                                        
+                                                                                                        return (
+                                                                                                            <div key={a.id} className="text-xs p-2 rounded bg-white shadow-sm border-l-4" style={{ borderLeftColor: kid?.color || '#ccc' }}>
+                                                                                                                {editAct?.id === a.id ? (
+                                                                                                                    <div className="space-y-2">
+                                                                                                                        <input value={editAct.title} onChange={e => setEditAct({ ...editAct, title: e.target.value })} className="w-full px-2 py-1 border rounded text-xs" />
+                                                                                                                        <input type="time" value={editAct.time} onChange={e => setEditAct({ ...editAct, time: e.target.value })} className="w-full px-2 py-1 border rounded text-xs" />
+                                                                                                                        <div className="flex gap-1">
+                                                                                                                            <button onClick={saveEdit} className="flex-1 px-2 py-1 bg-green-500 text-white rounded text-xs">Save</button>
+                                                                                                                            <button onClick={cancelEdit} className="flex-1 px-2 py-1 bg-gray-300 rounded text-xs">Cancel</button>
+                                                                                                                        </div>
+                                                                                                                    </div>
+                                                                                                                ) : (
+                                                                                                                    <>
+                                                                                                                        <div className="flex justify-between items-start mb-1">
+                                                                                                                            <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 text-xs">
+                                                                                                                                {isExpanded ? '▼' : '▶'}
+                                                                                                                            </button>
+                                                                                                                            <div className="flex gap-1">
+                                                                                                                                <button onClick={() => startEdit(a)} className="text-blue-500 hover:text-blue-700" title="Edit">✏️</button>
+                                                                                                                                <button onClick={() => delAct(a.id)} className="text-red-500 hover:text-red-700" title="Delete">×</button>
+                                                                                                                            </div>
+                                                                                                                        </div>
+                                                                                                                        <div className="font-semibold">{a.notify && '🔔 '}{a.title}</div>
+                                                                                                                        <div style={{ color: kid?.color }} className="font-semibold">{kid?.name}</div>
+                                                                                                                        <div className="text-gray-600">{a.time || 'No time'}</div>
+                                                                                                                        
+                                                                                                                        {isExpanded && (
+                                                                                                                            <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
+                                                                                                                                <div><strong>Location:</strong> {a.location || 'N/A'}</div>
+                                                                                                                                <div><strong>Parent:</strong> {a.parent}</div>
+                                                                                                                                <div><strong>Category:</strong> {a.activityCategory}</div>
+                                                                                                                                {a.notes && <div><strong>Notes:</strong> {a.notes}</div>}
+                                                                                                                                {a.prepTasks?.length > 0 && (
+                                                                                                                                    <div>
+                                                                                                                                        <strong>Prep Tasks:</strong>
+                                                                                                                                        <ul className="list-disc ml-3 mt-1">
+                                                                                                                                            {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
+                                                                                                                                        </ul>
+                                                                                                                                    </div>
+                                                                                                                                )}
+                                                                                                                            </div>
+                                                                                                                        )}
+                                                                                                                    </>
+                                                                                                                )}
+                                                                                                            </div>
+                                                                                                        );
+                                                                                                    })}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        );
+                                                                                    })}
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+
+                                                        {weekGroups.length === 0 && (
+                                                            <p className="text-center text-gray-500 py-8">No activities scheduled</p>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
+                                        </div>
+                                    ) : (
+                                        // List View
+                                        <div>
+                                            <div className="mb-4 flex gap-2 items-center">
+                                                <label className="font-semibold">Group by:</label>
+                                                <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-4 py-2 border rounded">
+                                                    <option value="none">None</option>
+                                                    <option value="kid">Kid</option>
+                                                    <option value="date">Date</option>
+                                                    <option value="parent">Parent</option>
+                                                </select>
+                                                <label className="ml-4 flex items-center gap-2">
+                                                    <input type="checkbox" checked={showPast} onChange={e => setShowPast(e.target.checked)} />
+                                                    <span>Show past activities</span>
+                                                </label>
+                                            </div>
+
+                                            {acts.length === 0 ? (
+                                                <p className="text-center text-gray-500">No activities yet</p>
+                                            ) : groupBy === 'none' ? (
+                                                <div className="space-y-3">
+                                                    {acts
+                                                        .filter(a => showPast || a.date >= new Date().toISOString().split('T')[0])
+                                                        .sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || ''))
+                                                        .map(a => {
+                                                            const kid = kids.find(k => k.id === a.kidId);
+                                                            const isExpanded = expandedActivities[a.id];
+                                                            
+                                                            return (
+                                                                <div key={a.id} className="p-4 bg-gray-50 rounded-lg border-l-4" style={{ borderLeftColor: kid?.color || '#ccc' }}>
+                                                                    {editAct?.id === a.id ? (
+                                                                        <div className="space-y-2">
+                                                                            <div className="grid grid-cols-3 gap-2">
+                                                                                <input value={editAct.title} onChange={e => setEditAct({ ...editAct, title: e.target.value })} placeholder="Activity" className="px-4 py-2 border rounded" />
+                                                                                <input type="date" value={editAct.date} onChange={e => setEditAct({ ...editAct, date: e.target.value })} className="px-4 py-2 border rounded" />
+                                                                                <input type="time" value={editAct.time} onChange={e => setEditAct({ ...editAct, time: e.target.value })} className="px-4 py-2 border rounded" />
+                                                                                <input value={editAct.location} onChange={e => setEditAct({ ...editAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
+                                                                                <select value={editAct.parent} onChange={e => setEditAct({ ...editAct, parent: e.target.value })} className="px-4 py-2 border rounded">
+                                                                                    <option>Mom</option>
+                                                                                    <option>Dad</option>
+                                                                                    <option>Both</option>
+                                                                                </select>
+                                                                                <select value={editAct.type} onChange={e => setEditAct({ ...editAct, type: e.target.value })} className="px-4 py-2 border rounded">
+                                                                                    <option>Pick Up</option>
+                                                                                    <option>Drop Off</option>
+                                                                                    <option>Other</option>
+                                                                                </select>
+                                                                            </div>
+                                                                            <textarea value={editAct.notes} onChange={e => setEditAct({ ...editAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded" rows="2" />
+                                                                            <div className="flex gap-2">
+                                                                                <button onClick={saveEdit} className="px-4 py-2 bg-green-500 text-white rounded">💾 Save</button>
+                                                                                <button onClick={cancelEdit} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex justify-between items-start">
+                                                                            <div className="flex-1">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 hover:text-gray-700">
+                                                                                        {isExpanded ? '▼' : '▶'}
+                                                                                    </button>
+                                                                                    <div>
+                                                                                        <h3 className="font-bold">
+                                                                                            {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
+                                                                                            {a.prepTasks?.length > 0 && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">+{a.prepTasks.length} tasks</span>}
+                                                                                        </h3>
+                                                                                        <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent}</p>
+                                                                                        
+                                                                                        {isExpanded && (
+                                                                                            <div className="mt-2 p-3 bg-white rounded text-sm">
+                                                                                                <p><strong>Location:</strong> {a.location || 'Not specified'}</p>
+                                                                                                <p><strong>Category:</strong> {a.activityCategory || 'Other'}</p>
+                                                                                                {a.notes && <p><strong>Notes:</strong> {a.notes}</p>}
+                                                                                                {a.prepTasks?.length > 0 && (
+                                                                                                    <div className="mt-2">
+                                                                                                        <p className="font-semibold mb-1">Prep Tasks:</p>
+                                                                                                        <ul className="list-disc ml-5">
+                                                                                                            {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
+                                                                                                        </ul>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        )}
                                                                                     </div>
                                                                                 </div>
-                                                                                <div className="flex gap-2">
-                                                                                    <button onClick={() => startEdit(a)} className="text-blue-500 text-xl hover:text-blue-700" title="Edit">✏️</button>
-                                                                                    <button onClick={() => delAct(a.id)} className="text-red-500 text-xl hover:text-red-700" title="Delete">×</button>
-                                                                                </div>
                                                                             </div>
-                                                                        )}
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
+                                                                            <div className="flex gap-2">
+                                                                                <button onClick={() => startEdit(a)} className="text-blue-500 text-xl hover:text-blue-700" title="Edit">✏️</button>
+                                                                                <button onClick={() => delAct(a.id)} className="text-red-500 text-xl hover:text-red-700" title="Delete">×</button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                                    </>
-                                ) : (
-                                    // Calendar view
-                                    <div className="p-8 text-center text-gray-500">
-                                        <p className="text-xl mb-2">📅 Calendar View</p>
-                                        <p>Calendar view coming soon!</p>
-                                        <p className="text-sm mt-2">For now, use List view with grouping options.</p>
-                                    </div>
-                                )}
+                                            ) : (
+                                                // Grouped view (existing code for kid/date/parent grouping)
+                                                <div className="space-y-4">
+                                                    {(() => {
+                                                        const filteredActs = acts.filter(a => showPast || a.date >= new Date().toISOString().split('T')[0]);
+                                                        let groups = {};
+                                                        
+                                                        if (groupBy === 'kid') {
+                                                            kids.forEach(k => {
+                                                                groups[k.id] = { name: k.name, color: k.color, activities: filteredActs.filter(a => a.kidId === k.id) };
+                                                            });
+                                                        } else if (groupBy === 'date') {
+                                                            filteredActs.forEach(a => {
+                                                                if (!groups[a.date]) groups[a.date] = { name: a.date, activities: [] };
+                                                                groups[a.date].activities.push(a);
+                                                            });
+                                                        } else if (groupBy === 'parent') {
+                                                            ['Mom', 'Dad', 'Both'].forEach(p => {
+                                                                groups[p] = { name: p, activities: filteredActs.filter(a => a.parent === p) };
+                                                            });
+                                                        }
+
+                                                        return Object.entries(groups).map(([key, group]) => {
+                                                            const isExpanded = expandedGroups[key] !== false;
+                                                            
+                                                            return (
+                                                                <div key={key} className="border-2 rounded-lg" style={groupBy === 'kid' ? { borderColor: group.color } : {}}>
+                                                                    <button 
+                                                                        onClick={() => setExpandedGroups({ ...expandedGroups, [key]: !isExpanded })}
+                                                                        className="w-full p-4 flex justify-between items-center font-bold text-lg"
+                                                                    >
+                                                                        <span style={groupBy === 'kid' ? { color: group.color } : {}}>
+                                                                            {group.name} ({group.activities.length})
+                                                                        </span>
+                                                                        <span>{isExpanded ? '▼' : '▶'}</span>
+                                                                    </button>
+                                                                    
+                                                                    {isExpanded && (
+                                                                        <div className="p-4 pt-0 space-y-3">
+                                                                            {group.activities.sort((a, b) => a.date.localeCompare(b.date) || (a.time || '').localeCompare(b.time || '')).map(a => {
+                                                                                const kid = kids.find(k => k.id === a.kidId);
+                                                                                const isExpanded = expandedActivities[a.id];
+                                                                                
+                                                                                return (
+                                                                                    <div key={a.id} className="p-4 bg-gray-50 rounded-lg">
+                                                                                        {editAct?.id === a.id ? (
+                                                                                            <div className="space-y-2">
+                                                                                                <div className="grid grid-cols-3 gap-2">
+                                                                                                    <input value={editAct.title} onChange={e => setEditAct({ ...editAct, title: e.target.value })} placeholder="Activity" className="px-4 py-2 border rounded" />
+                                                                                                    <input type="date" value={editAct.date} onChange={e => setEditAct({ ...editAct, date: e.target.value })} className="px-4 py-2 border rounded" />
+                                                                                                    <input type="time" value={editAct.time} onChange={e => setEditAct({ ...editAct, time: e.target.value })} className="px-4 py-2 border rounded" />
+                                                                                                    <input value={editAct.location} onChange={e => setEditAct({ ...editAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
+                                                                                                    <select value={editAct.parent} onChange={e => setEditAct({ ...editAct, parent: e.target.value })} className="px-4 py-2 border rounded">
+                                                                                                        <option>Mom</option>
+                                                                                                        <option>Dad</option>
+                                                                                                        <option>Both</option>
+                                                                                                    </select>
+                                                                                                    <select value={editAct.type} onChange={e => setEditAct({ ...editAct, type: e.target.value })} className="px-4 py-2 border rounded">
+                                                                                                        <option>Pick Up</option>
+                                                                                                        <option>Drop Off</option>
+                                                                                                        <option>Other</option>
+                                                                                                    </select>
+                                                                                                    <select value={editAct.activityCategory} onChange={e => setEditAct({ ...editAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
+                                                                                                        <option>Physical</option>
+                                                                                                        <option>Social</option>
+                                                                                                        <option>Creative</option>
+                                                                                                        <option>Academic</option>
+                                                                                                        <option>Other</option>
+                                                                                                    </select>
+                                                                                                </div>
+                                                                                                <textarea value={editAct.notes} onChange={e => setEditAct({ ...editAct, notes: e.target.value })} placeholder="Notes" className="w-full px-4 py-2 border rounded" rows="2" />
+                                                                                                <div className="flex gap-2">
+                                                                                                    <button onClick={saveEdit} className="px-4 py-2 bg-green-500 text-white rounded">💾 Save</button>
+                                                                                                    <button onClick={cancelEdit} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        ) : (
+                                                                                            <div className="flex justify-between items-start">
+                                                                                                <div className="flex-1">
+                                                                                                    <div className="flex items-center gap-2">
+                                                                                                        <button onClick={() => toggleActivityExpanded(a.id)} className="text-gray-500 hover:text-gray-700">
+                                                                                                            {isExpanded ? '▼' : '▶'}
+                                                                                                        </button>
+                                                                                                        <div>
+                                                                                                            <h3 className="font-bold">
+                                                                                                                {a.notify && '🔔 '}{a.title} - <span style={{ color: kid?.color }}>{kid?.name}</span>
+                                                                                                                {a.prepTasks?.length > 0 && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">+{a.prepTasks.length} tasks</span>}
+                                                                                                            </h3>
+                                                                                                            <p className="text-sm text-gray-600">{a.date} {a.time} | {a.type} | {a.parent}</p>
+                                                                                                            
+                                                                                                            {isExpanded && (
+                                                                                                                <div className="mt-2 p-3 bg-white rounded text-sm">
+                                                                                                                    <p><strong>Location:</strong> {a.location || 'Not specified'}</p>
+                                                                                                                    <p><strong>Category:</strong> {a.activityCategory || 'Other'}</p>
+                                                                                                                    <p><strong>Created by:</strong> {a.createdBy || 'Unknown'}</p>
+                                                                                                                    {a.notes && <p><strong>Notes:</strong> {a.notes}</p>}
+                                                                                                                    {a.prepTasks?.length > 0 && (
+                                                                                                                        <div className="mt-2">
+                                                                                                                            <p className="font-semibold mb-1">Prep Tasks:</p>
+                                                                                                                            <ul className="list-disc ml-5">
+                                                                                                                                {a.prepTasks.map((task, idx) => <li key={idx}>{task}</li>)}
+                                                                                                                            </ul>
+                                                                                                                        </div>
+                                                                                                                    )}
+                                                                                                                </div>
+                                                                                                            )}
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                                <div className="flex gap-2">
+                                                                                                    <button onClick={() => startEdit(a)} className="text-blue-500 text-xl hover:text-blue-700" title="Edit">✏️</button>
+                                                                                                    <button onClick={() => delAct(a.id)} className="text-red-500 text-xl hover:text-red-700" title="Delete">×</button>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        });
+                                                    })()}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
