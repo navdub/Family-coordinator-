@@ -469,134 +469,161 @@ const handleDisconnectCalendar = () => {
                                     {showNL ? '▼ Minimize' : '▶ Expand'}
                                 </button>
                             </div>
+                        
+{showNL && (
+    <div className="mb-8 p-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg text-white">
+        <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center gap-2">
+                <span className="text-2xl">💬</span>
+                <h2 className="text-2xl font-bold">Ask</h2>
+            </div>
+            <button 
+                onClick={() => setShowNL(false)}
+                className="px-3 py-1 bg-white/20 rounded-lg hover:bg-white/30 transition text-sm"
+            >
+                Minimize
+            </button>
+        </div>
+        
+        <p className="mb-4 text-white/90 text-sm">
+            Add, edit, or delete activities or just ask a question about activities
+        </p>
+        
+        <textarea
+            value={nlText}
+            onChange={e => setNlText(e.target.value)}
+            placeholder="Type what you want to do or ask a question..."
+            className="w-full p-4 rounded-lg border-2 border-white/30 bg-white/10 text-white placeholder-white/60 focus:outline-none focus:border-white/60 transition mb-4"
+            rows={3}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    handleNL();
+                }
+            }}
+        />
+        
+        <div className="flex gap-2">
+            <button
+                onClick={async () => {
+                    if (!nlText.trim()) return alert('Please type something');
+                    setNlLoading(true);
+                    try {
+                        const result = await APIService.parseActivity(nlText, kids, acts);
+                        
+                        if (result.action === 'add') {
+                            const matchingKid = kids.find(k => k.id === result.data.kidId);
                             
-                            {showNL && (
-                                <div className="bg-white rounded-lg p-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
-                                        <div className="bg-green-50 p-2 rounded">
-                                            <p className="font-semibold text-xs text-green-800 mb-1">➕ ADD</p>
-                                            <p className="text-xs text-gray-600">"Emma soccer Tuesday 4pm"</p>
-                                        </div>
-                                        <div className="bg-blue-50 p-2 rounded">
-                                            <p className="font-semibold text-xs text-blue-800 mb-1">✏️ EDIT</p>
-                                            <p className="text-xs text-gray-600">"change Emma soccer to 5pm"</p>
-                                        </div>
-                                        <div className="bg-red-50 p-2 rounded">
-                                            <p className="font-semibold text-xs text-red-800 mb-1">🗑️ DELETE</p>
-                                            <p className="text-xs text-gray-600">"delete Emma soccer Tuesday"</p>
-                                        </div>
-                                        <div className="bg-purple-50 p-2 rounded">
-                                            <p className="font-semibold text-xs text-purple-800 mb-1">🔍 QUERY</p>
-                                            <p className="text-xs text-gray-600">"when is DD2's swim class?"</p>
-                                        </div>
-                                    </div>
-                                    <textarea value={nlText} onChange={e => setNlText(e.target.value)} placeholder="Type what you want to do or ask a question..." className="w-full px-4 py-3 border-2 border-blue-200 rounded-lg mb-3" rows="2" autoFocus />
-                                    <div className="flex gap-2">
-                                        <button onClick={async () => {
-                                            if (!nlText.trim()) return alert('Please type something');
-                                            
-                                            setNlLoading(true);
-                                            try {
-                                                // Use APIService instead of direct fetch
-                                                const result = await APIService.parseActivity(nlText, kids, acts);
-                                                
-                                                if (result.action === 'add') {
-                                                    const matchingKid = kids.find(k => k.id === result.data.kidId);
-                                                    
-                                                    if (!matchingKid) {
-                                                        alert('Kid not found. Available: ' + kids.map(k => k.name).join(', '));
-                                                        setNlLoading(false);
-                                                        return;
-                                                    }
-                                                    
-                                                    const newActivity = {
-                                                        kidId: result.data.kidId,
-                                                        title: result.data.title || '',
-                                                        date: result.data.date || '',
-                                                        time: result.data.time || '',
-                                                        location: result.data.location || '',
-                                                        parent: result.data.parent || APP_CONFIG.DEFAULT_PARENT,
-                                                        type: result.data.type || APP_CONFIG.DEFAULT_ACTIVITY_TYPE,
-                                                        activityCategory: result.data.activityCategory || APP_CONFIG.DEFAULT_CATEGORY,
-                                                        notes: result.data.notes || '',
-                                                        prepTasks: [],
-                                                        duration: APP_CONFIG.DEFAULT_DURATION,
-                                                        notify: false,
-                                                        recurring: 'none',
-                                                        createdBy: APP_CONFIG.DEFAULT_PARENT,
-                                                        familyCode: code
-                                                    };
-                                                    
-                                                    await db.collection('activities').add(newActivity);
-                                                    setShowNL(false);
-                                                    setNlText('');
-                                                    alert('✅ Activity added!\n\n' + result.data.title + ' for ' + matchingKid.name + '\n' + result.data.date + ' at ' + result.data.time);
-                                                    
-                                                } else if (result.action === 'edit') {
-                                                    if (!result.data.activityId) {
-                                                        alert('Could not find activity to edit');
-                                                        setNlLoading(false);
-                                                        return;
-                                                    }
-                                                    
-                                                    if (confirm('Edit this activity?\n\n' + result.data.activityDescription + '\n\nChanges: ' + JSON.stringify(result.data.changes, null, 2))) {
-                                                        const actRef = db.collection('activities').doc(result.data.activityId);
-                                                        await actRef.update(result.data.changes);
-                                                        setShowNL(false);
-                                                        setNlText('');
-                                                        alert('✅ Activity updated!');
-                                                    }
-                                                    
-                                                } else if (result.action === 'delete') {
-                                                    if (!result.data.activityId) {
-                                                        alert('Could not find activity to delete');
-                                                        setNlLoading(false);
-                                                        return;
-                                                    }
-                                                    
-                                                    if (confirm('Delete this activity?\n\n' + result.data.activityDescription)) {
-                                                        await db.collection('activities').doc(result.data.activityId).delete();
-                                                        setShowNL(false);
-                                                        setNlText('');
-                                                        alert('✅ Activity deleted!');
-                                                    }
-                                                    
-                                                } else if (result.action === 'query') {
-                                                    // Handle query results
-                                                    const data = result.data;
-                                                    
-                                                    if (data.count === 0) {
-                                                        alert('🔍 ' + data.answer);
-                                                    } else {
-                                                        // Build a nice display of results
-                                                        let message = '🔍 ' + data.answer + '\n\n';
-                                                        message += '📋 Details:\n';
-                                                        data.activities.forEach((act, i) => {
-                                                            message += '\n' + (i + 1) + '. ' + act.title + ' - ' + act.kidName + '\n';
-                                                            message += '   📅 ' + act.date + ' at ' + act.time + '\n';
-                                                            if (act.location) message += '   📍 ' + act.location + '\n';
-                                                            message += '   👤 ' + act.parent + ' (' + act.type + ')';
-                                                            if (i < data.activities.length - 1) message += '\n';
-                                                        });
-                                                        
-                                                        alert(message);
-                                                    }
-                                                    
-                                                    setShowNL(false);
-                                                    setNlText('');
-                                                }
-                                                
-                                            } catch (error) {
-                                                alert('Error: ' + error.message);
-                                            }
-                                            setNlLoading(false);
-                                        }} disabled={nlLoading} className="px-6 py-2 bg-blue-600 text-white rounded-lg">
-                                            {nlLoading ? '🔄 Processing...' : '✨ Execute'}
-                                        </button>
-                                        <button onClick={() => { setShowNL(false); setNlText(''); }} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
-                                    </div>
-                                </div>
-                            )}
+                            if (!matchingKid) {
+                                alert('Kid not found. Available: ' + kids.map(k => k.name).join(', '));
+                                setNlLoading(false);
+                                return;
+                            }
+                            
+                            const newActivity = {
+                                kidId: result.data.kidId,
+                                title: result.data.title || '',
+                                date: result.data.date || '',
+                                time: result.data.time || '',
+                                location: result.data.location || '',
+                                parent: result.data.parent || APP_CONFIG.DEFAULT_PARENT,
+                                type: result.data.type || APP_CONFIG.DEFAULT_ACTIVITY_TYPE,
+                                activityCategory: result.data.activityCategory || APP_CONFIG.DEFAULT_CATEGORY,
+                                notes: result.data.notes || '',
+                                prepTasks: [],
+                                duration: APP_CONFIG.DEFAULT_DURATION,
+                                notify: false,
+                                recurring: 'none',
+                                createdBy: APP_CONFIG.DEFAULT_PARENT,
+                                familyCode: code
+                            };
+                            
+                            await db.collection('activities').add(newActivity);
+                            setShowNL(false);
+                            setNlText('');
+                            alert('✅ Activity added!\n\n' + result.data.title + ' for ' + matchingKid.name + '\n' + result.data.date + ' at ' + result.data.time);
+                            
+                        } else if (result.action === 'edit') {
+                            if (!result.data.activityId) {
+                                alert('Could not find activity to edit');
+                                setNlLoading(false);
+                                return;
+                            }
+                            
+                            if (confirm('Edit this activity?\n\n' + result.data.activityDescription + '\n\nChanges: ' + JSON.stringify(result.data.changes, null, 2))) {
+                                const actRef = db.collection('activities').doc(result.data.activityId);
+                                await actRef.update(result.data.changes);
+                                setShowNL(false);
+                                setNlText('');
+                                alert('✅ Activity updated!');
+                            }
+                            
+                        } else if (result.action === 'delete') {
+                            if (!result.data.activityId) {
+                                alert('Could not find activity to delete');
+                                setNlLoading(false);
+                                return;
+                            }
+                            
+                            if (confirm('Delete this activity?\n\n' + result.data.activityDescription)) {
+                                await db.collection('activities').doc(result.data.activityId).delete();
+                                setShowNL(false);
+                                setNlText('');
+                                alert('✅ Activity deleted!');
+                            }
+                            
+                        } else if (result.action === 'query') {
+                            const data = result.data;
+                            
+                            if (data.count === 0) {
+                                alert('🔍 ' + data.answer);
+                            } else {
+                                let message = '🔍 ' + data.answer + '\n\n';
+                                message += '📋 Details:\n';
+                                data.activities.forEach((act, i) => {
+                                    message += '\n' + (i + 1) + '. ' + act.title + ' - ' + act.kidName + '\n';
+                                    message += '   📅 ' + act.date + ' at ' + act.time + '\n';
+                                    if (act.location) message += '   📍 ' + act.location + '\n';
+                                    message += '   👤 ' + act.parent + ' (' + act.type + ')';
+                                    if (i < data.activities.length - 1) message += '\n';
+                                });
+                                
+                                alert(message);
+                            }
+                            
+                            setShowNL(false);
+                            setNlText('');
+                        }
+                        
+                    } catch (error) {
+                        alert('Error: ' + error.message);
+                    }
+                    setNlLoading(false);
+                }}
+                disabled={!nlText.trim() || nlLoading}
+                className="flex-1 px-6 py-3 bg-white text-blue-600 rounded-lg font-bold hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-md flex items-center justify-center gap-2"
+            >
+                {nlLoading ? (
+                    <>
+                        <span className="inline-block animate-spin">⚙️</span>
+                        Processing...
+                    </>
+                ) : (
+                    <>✨ Execute</>
+                )}
+            </button>
+            <button
+                onClick={() => setNlText('')}
+                className="px-4 py-3 bg-white/20 rounded-lg hover:bg-white/30 transition"
+            >
+                Clear
+            </button>
+        </div>
+        
+        <p className="mt-3 text-xs text-white/70 text-center">
+            💡 Tip: Press ⌘+Enter (or Ctrl+Enter) to execute quickly
+        </p>
+    </div>
+)}
                         </div>
 
                         <div className="mb-8">
