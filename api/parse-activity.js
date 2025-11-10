@@ -13,7 +13,7 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { text, kids, activities } = req.body;
+  const { text, members, activities } = req.body;
 
   if (!text) {
     return res.status(400).json({ error: 'Text is required' });
@@ -21,7 +21,7 @@ module.exports = async (req, res) => {
 
   try {
     const today = new Date().toISOString().split('T')[0];
-    const kidsNames = kids.map(k => k.name).join(', ');
+    const memberNames = members.map(m => m.name).join(', ');
 
     // Step 1: Determine the intent (add, edit, delete, or query)
     const intentResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -100,40 +100,40 @@ Respond with ONLY the JSON object, nothing else.`
           messages: [
             {
               role: 'system',
-              content: `You are a helpful assistant that parses natural language into activity data. 
-Available kids: ${kidsNames}
+              content: `You are a helpful assistant that parses natural language into activity data.
+Available members: ${memberNames}
 Today's date: ${today}
 
 Extract the following from the user's text:
-- kidName: which kid (must match available kids exactly)
-- title: activity name
+- memberName: which member (must match available members, or empty for self)
+- title: activity/appointment name (dentist, massage, gym, doctor, haircut, meeting, etc.)
 - date: in YYYY-MM-DD format (if "tomorrow" = ${new Date(Date.now() + 86400000).toISOString().split('T')[0]}, if "today" = ${today}, if day name like "Monday" = next occurrence)
 - time: in HH:MM format (24-hour, e.g., "3pm" = "15:00", "10am" = "10:00")
 - location: where (if mentioned)
-- type: "Pick Up", "Drop Off", or "Other"
-- parent: "Mom", "Dad", or "Both"
-- activityCategory: "Physical", "Social", "Creative", "Academic", or "Other"
+- type: "Appointment", "Service", "Class", "Visit", or "Other"
+- parent: "Self", "Partner", or "Both"
+- activityCategory: "Health" (doctor, dentist), "Wellness" (massage, spa), "Professional" (haircut, meeting), "Recreation" (gym, hobby), "Personal", or "Other"
 - notes: any additional info
 
 Rules:
-1. kidName MUST match one of the available kids exactly
+1. memberName should match one of the available members, or leave empty for self
 2. If time includes "pm" and hour < 12, add 12 (e.g., 3pm = 15:00)
 3. If time includes "am" or is before noon, use as-is (e.g., 10am = 10:00)
-4. Default parent to "Mom" if not specified
-5. Default type to "Pick Up" if not specified
-6. Infer activityCategory from the activity (soccer = Physical, art = Creative, etc.)
+4. Default parent to "Self" if not specified
+5. Default type to "Appointment" if not specified
+6. Infer activityCategory from the activity (dentist/doctor = Health, massage/spa = Wellness, haircut/meeting = Professional, gym = Recreation, etc.)
 
 Respond ONLY with valid JSON. Example:
 {
-  "kidName": "Emma",
-  "title": "Soccer practice",
+  "memberName": "John",
+  "title": "Dentist appointment",
   "date": "2025-10-25",
   "time": "15:00",
-  "location": "Central Park",
-  "type": "Pick Up",
-  "parent": "Mom",
-  "activityCategory": "Physical",
-  "notes": ""
+  "location": "Downtown Dental",
+  "type": "Appointment",
+  "parent": "Self",
+  "activityCategory": "Health",
+  "notes": "6-month checkup"
 }
 
 If something is not mentioned, omit it or use reasonable defaults.`
@@ -166,15 +166,15 @@ If something is not mentioned, omit it or use reasonable defaults.`
         }
       }
 
-      // Find matching kid
-      const matchingKid = kids.find(k => 
-        k.name.toLowerCase() === parsed.kidName?.toLowerCase()
+      // Find matching member
+      const matchingMember = members.find(m =>
+        m.name.toLowerCase() === parsed.memberName?.toLowerCase()
       );
 
-      if (!matchingKid && parsed.kidName) {
+      if (!matchingMember && parsed.memberName) {
         return res.status(400).json({
-          error: `Kid "${parsed.kidName}" not found`,
-          availableKids: kidsNames
+          error: `Member "${parsed.memberName}" not found`,
+          availableMembers: memberNames
         });
       }
 
@@ -182,7 +182,7 @@ If something is not mentioned, omit it or use reasonable defaults.`
         action: 'add',
         data: {
           ...parsed,
-          kidId: matchingKid?.id
+          memberId: matchingMember?.id
         },
         confidence: intent.confidence
       });
@@ -190,10 +190,10 @@ If something is not mentioned, omit it or use reasonable defaults.`
     } else if (intent.action === 'edit' || intent.action === 'delete') {
       // Parse which activity to edit/delete and what changes to make
       const activityDescriptions = activities.map(a => {
-        const kid = kids.find(k => k.id === a.kidId);
+        const member = members.find(m => m.id === a.memberId);
         return {
           id: a.id,
-          description: `${a.title} for ${kid?.name} on ${a.date} at ${a.time}`
+          description: `${a.title} for ${member?.name} on ${a.date} at ${a.time}`
         };
       });
 
@@ -246,8 +246,8 @@ Respond with JSON:
 `}
 
 Match based on:
-1. Kid name (if mentioned)
-2. Activity name (e.g., "soccer", "piano")
+1. Member name (if mentioned)
+2. Activity name (e.g., "dentist", "massage", "meeting")
 3. Date (if mentioned - "Tuesday", "tomorrow", specific date)
 4. Time (if mentioned)
 
@@ -289,17 +289,17 @@ Respond ONLY with the JSON object, nothing else.`
       if (!matchedActivity) {
         return res.status(404).json({
           error: 'No matching activity found',
-          suggestion: 'Try being more specific with kid name, activity name, and date'
+          suggestion: 'Try being more specific with member name, activity name, and date'
         });
       }
 
-      const matchedKid = kids.find(k => k.id === matchedActivity.kidId);
+      const matchedMember = members.find(m => m.id === matchedActivity.memberId);
 
       return res.status(200).json({
         action: intent.action,
         data: {
           activityId: matchResult.activityId,
-          activityDescription: `${matchedActivity.title} for ${matchedKid?.name} on ${matchedActivity.date} at ${matchedActivity.time}`,
+          activityDescription: `${matchedActivity.title} for ${matchedMember?.name} on ${matchedActivity.date} at ${matchedActivity.time}`,
           changes: matchResult.changes || {}
         },
         confidence: matchResult.confidence || intent.confidence
@@ -324,16 +324,16 @@ User's question: "${text}"
 
 Available activities:
 ${activities.map((a, i) => {
-  const kid = kids.find(k => k.id === a.kidId);
-  return `${i + 1}. ${a.title} for ${kid?.name || 'Unknown'} on ${a.date} at ${a.time} (Location: ${a.location || 'Not specified'}, Type: ${a.type}, Parent: ${a.parent})`;
+  const member = members.find(m => m.id === a.memberId);
+  return `${i + 1}. ${a.title} for ${member?.name || 'Unknown'} on ${a.date} at ${a.time} (Location: ${a.location || 'Not specified'}, Type: ${a.type}, Parent: ${a.parent})`;
 }).join('\n')}
 
 Instructions:
 1. Find activities that match the user's question
-2. Consider kid names, activity names, dates, times, locations
+2. Consider member names, activity names, dates, times, locations
 3. If asking "when", focus on date and time
 4. If asking "what", list relevant activities
-5. If asking about a specific kid (like "DD2"), match that kid
+5. If asking about a specific member, match that member
 6. Be specific and helpful
 
 Respond with JSON:
@@ -406,11 +406,11 @@ Respond ONLY with the JSON object, nothing else.`
       const matchingActivityDetails = activities
         .filter(a => queryResult.matchingActivities.includes(a.id))
         .map(a => {
-          const kid = kids.find(k => k.id === a.kidId);
+          const member = members.find(m => m.id === a.memberId);
           return {
             id: a.id,
             title: a.title,
-            kidName: kid?.name || 'Unknown',
+            memberName: member?.name || 'Unknown',
             date: a.date,
             time: a.time,
             location: a.location,

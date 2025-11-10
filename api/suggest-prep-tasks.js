@@ -34,12 +34,12 @@ body: JSON.stringify({
 model: ‘gpt-3.5-turbo’,
 messages: [
 {
-role: ‘system’,
-content: ‘You suggest prep tasks for kid activities. Return ONLY a JSON array of 3-5 short task strings. Each task should be 2-5 words. Example: [“Pack water bottle”, “Wash uniform”, “Check weather”]’
+role: 'system',
+content: 'You suggest prep tasks for appointments and activities. Return ONLY a JSON array of 3-5 short task strings. Each task should be 2-5 words. Example: ["Confirm appointment", "Bring insurance card", "Arrive 10 min early"]'
 },
 {
-role: ‘user’,
-content: ’Activity: ’ + activityTitle + ‘\n\nSuggest 3-5 prep tasks. Return ONLY the JSON array.’
+role: 'user',
+content: 'Activity/Appointment: ' + activityTitle + '\n\nSuggest 3-5 prep tasks. Return ONLY the JSON array.'
 }
 ],
 temperature: 0.5,

@@ -11,7 +11,7 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { location, kids, preferences } = req.body;
+  const { location, members, preferences } = req.body;
 
   if (!location) {
     return res.status(400).json({ error: 'Location is required' });
@@ -28,10 +28,10 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const kidsInfo = kids && kids.length > 0 
-      ? kids.map(k => k.name).join(', ')
-      : 'children';
-    
+    const membersInfo = members && members.length > 0
+      ? members.map(m => m.name).join(', ')
+      : 'individual';
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -43,11 +43,11 @@ module.exports = async (req, res) => {
         messages: [
           {
             role: 'system',
-            content: 'You are a helpful assistant that recommends kid-friendly activities. Return ONLY a JSON array with no markdown. Each activity should have: title, venue, type, duration, ageAppropriate, bestTime, notes.'
+            content: 'You are a helpful assistant that recommends local amenities and services. Return ONLY a JSON array with no markdown. Each recommendation should have: title (service name), venue (business name), type (Health/Wellness/Professional/Recreation/Personal), duration (minutes), category (Health/Wellness/Professional/Recreation/Personal), bestTime, notes, websiteUrl (optional).'
           },
           {
             role: 'user',
-            content: 'Location: ' + location + '\nKids: ' + kidsInfo + (preferences ? '\nPreferences: ' + preferences : '') + '\n\nSuggest 5 kid-friendly activities. Return ONLY the JSON array.'
+            content: 'Location: ' + location + '\nMembers: ' + membersInfo + (preferences ? '\nPreferences: ' + preferences : '') + '\n\nSuggest 5 local amenities or services (e.g., dentists, massage therapists, gyms, hair salons, medical clinics). Include real or realistic venue names. Return ONLY the JSON array.'
           }
         ],
         temperature: 0.7,

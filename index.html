@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Family Activity Coordinator</title>
+    <title>Local Amenities Finder</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -57,7 +57,7 @@
             return (
                 <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-                        <h1 className="text-3xl font-bold text-center mb-6">Family Activity Tracker</h1>
+                        <h1 className="text-3xl font-bold text-center mb-6">Local Amenities Finder</h1>
                         {err && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{err}</div>}
                         {!isNew ? (
                             <>
@@ -80,10 +80,10 @@
         function App() {
             const [code, setCode] = useState(localStorage.getItem('familyCode'));
             const [name, setName] = useState(localStorage.getItem('familyName'));
-            const [kids, setKids] = useState([]);
+            const [members, setMembers] = useState([]);
             const [acts, setActs] = useState([]);
             const [loading, setLoading] = useState(true);
-            const [showKid, setShowKid] = useState(false);
+            const [showMember, setShowMember] = useState(false);
             const [showAct, setShowAct] = useState(false);
             const [showCode, setShowCode] = useState(false);
             const [showPast, setShowPast] = useState(false);
@@ -95,10 +95,10 @@
             const [groupBy, setGroupBy] = useState('none');
             const [expandedGroups, setExpandedGroups] = useState({});
             const [expandedActivities, setExpandedActivities] = useState({});
-            const [newKid, setNewKid] = useState({ name: '', color: '#4ECDC4' });
-            const [newAct, setNewAct] = useState({ 
-                kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60,
-                type: 'Pick Up', notify: false, recurring: 'none', prepTasks: [], activityCategory: 'Physical', createdBy: 'Mom'
+            const [newMember, setNewMember] = useState({ name: '', color: '#4ECDC4' });
+            const [newAct, setNewAct] = useState({
+                memberId: '', title: '', date: '', time: '', location: '', parent: 'Self', notes: '', duration: 60,
+                type: 'Appointment', notify: false, recurring: 'none', prepTasks: [], activityCategory: 'Health', createdBy: 'Self'
             });
             const [nlText, setNlText] = useState('');
             const [nlLoading, setNlLoading] = useState(false);
@@ -131,9 +131,9 @@ const [tokenClient, setTokenClient] = useState(null);
 
             useEffect(() => {
                 if (!code) return setLoading(false);
-                
-                const unsub1 = db.collection('kids').where('familyCode', '==', code).onSnapshot(s => {
-                    setKids(s.docs.map(d => ({ id: d.id, ...d.data() })));
+
+                const unsub1 = db.collection('members').where('familyCode', '==', code).onSnapshot(s => {
+                    setMembers(s.docs.map(d => ({ id: d.id, ...d.data() })));
                     setLoading(false);
                 });
                 
@@ -148,10 +148,10 @@ const [tokenClient, setTokenClient] = useState(null);
                         const actTime = new Date(`${a.date}T${a.time}`);
                         const diff = actTime - now;
                         if (diff > 1740000 && diff < 1800000) {
-                            const kid = kids.find(k => k.id === a.kidId);
+                            const member = members.find(m => m.id === a.memberId);
                             if ('Notification' in window && Notification.permission === 'granted') {
                                 new Notification(`Upcoming: ${a.title}`, {
-                                    body: `${kid?.name} - ${a.type} in 30 min at ${a.location}`
+                                    body: `${member?.name} - ${a.type} in 30 min at ${a.location}`
                                 });
                             }
                         }
@@ -159,7 +159,7 @@ const [tokenClient, setTokenClient] = useState(null);
                 }, 60000);
 
                 return () => { unsub1(); unsub2(); clearInterval(interval); };
-            }, [code, acts, kids]);
+            }, [code, acts, members]);
 
             // Initialize Google Calendar API
             useEffect(() => {
@@ -173,19 +173,19 @@ const [tokenClient, setTokenClient] = useState(null);
                 }
             }, []);
 
-            const addKid = async () => {
-                if (!newKid.name) return;
-                await db.collection('kids').add({ ...newKid, familyCode: code });
-                setNewKid({ name: '', color: '#4ECDC4' });
-                setShowKid(false);
+            const addMember = async () => {
+                if (!newMember.name) return;
+                await db.collection('members').add({ ...newMember, familyCode: code });
+                setNewMember({ name: '', color: '#4ECDC4' });
+                setShowMember(false);
             };
 
-            const delKid = async (id) => {
-                const kid = kids.find(k => k.id === id);
-                const kidActs = acts.filter(a => a.kidId === id);
-                if (!confirm(`Delete ${kid?.name}? This will also delete ${kidActs.length} activities.`)) return;
-                await db.collection('kids').doc(id).delete();
-                const snap = await db.collection('activities').where('kidId', '==', id).get();
+            const delMember = async (id) => {
+                const member = members.find(m => m.id === id);
+                const memberActs = acts.filter(a => a.memberId === id);
+                if (!confirm(`Delete ${member?.name}? This will also delete ${memberActs.length} activities.`)) return;
+                await db.collection('members').doc(id).delete();
+                const snap = await db.collection('activities').where('memberId', '==', id).get();
                 snap.forEach(d => d.ref.delete());
             };
 
@@ -209,7 +209,7 @@ const [tokenClient, setTokenClient] = useState(null);
             };
 
             const addAct = async () => {
-                if (!newAct.title || !newAct.kidId || !newAct.date) return;
+                if (!newAct.title || !newAct.memberId || !newAct.date) return;
 
                 if (newAct.recurring !== 'none') {
                     const startDate = new Date(newAct.date);
@@ -235,7 +235,7 @@ const [tokenClient, setTokenClient] = useState(null);
                 }
 
                 setNewAct({ 
-                    kidId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60,
+                    memberId: '', title: '', date: '', time: '', location: '', parent: 'Mom', notes: '', duration: 60,
                     type: 'Pick Up', notify: false, recurring: 'none', prepTasks: [], activityCategory: 'Physical', createdBy: 'Mom'
                 });
                 setSuggestedPrepTasks([]);
@@ -244,15 +244,15 @@ const [tokenClient, setTokenClient] = useState(null);
 
             const delAct = async (id) => {
                 const a = acts.find(act => act.id === id);
-                const kid = kids.find(k => k.id === a?.kidId);
-                if (!confirm(`Delete ${a?.title} - ${kid?.name} on ${a?.date}?`)) return;
+                const member = members.find(m => m.id === a?.memberId);
+                if (!confirm(`Delete ${a?.title} - ${member?.name} on ${a?.date}?`)) return;
                 await db.collection('activities').doc(id).delete();
             };
 
             const startEdit = (activity) => {
-                setEditAct({ 
+                setEditAct({
                     id: activity.id,
-                    kidId: activity.kidId,
+                    memberId: activity.memberId,
                     title: activity.title,
                     date: activity.date,
                     time: activity.time,
@@ -270,7 +270,7 @@ const [tokenClient, setTokenClient] = useState(null);
             };
 
             const saveEdit = async () => {
-                if (!editAct.kidId || !editAct.title || !editAct.date || !editAct.time) {
+                if (!editAct.memberId || !editAct.title || !editAct.date || !editAct.time) {
                     return alert('Please fill required fields');
                 }
                 
@@ -300,7 +300,7 @@ const handleConnectCalendar = () => {
 const handleSyncCalendar = async () => {
     await window.CalendarSync.syncCalendar(
         gapiInited,
-        kids,
+        members,
         code,
         db,
         setCalendarSyncing,
@@ -319,20 +319,20 @@ const handleDisconnectCalendar = () => {
                 const cats = {};
                 acts.forEach(a => {
                     const cat = a.activityCategory || 'Other';
-                    if (!cats[cat]) cats[cat] = { total: 0, byKid: {} };
+                    if (!cats[cat]) cats[cat] = { total: 0, byMember: {} };
                     cats[cat].total++;
-                    const kid = kids.find(k => k.id === a.kidId);
-                    if (kid) {
-                        cats[cat].byKid[kid.name] = (cats[cat].byKid[kid.name] || 0) + 1;
+                    const member = members.find(m => m.id === a.memberId);
+                    if (member) {
+                        cats[cat].byMember[member.name] = (cats[cat].byMember[member.name] || 0) + 1;
                     }
                 });
                 return cats;
             };
 
             const getParentLoadBalance = () => {
-                const balance = { Mom: 0, Dad: 0, Both: 0 };
-                const created = { Mom: 0, Dad: 0 };
-                
+                const balance = { Self: 0, Partner: 0, Both: 0 };
+                const created = { Self: 0, Partner: 0 };
+
                 acts.forEach(a => {
                     balance[a.parent] = (balance[a.parent] || 0) + 1;
                     if (a.createdBy) created[a.createdBy] = (created[a.createdBy] || 0) + 1;
@@ -349,7 +349,7 @@ const handleDisconnectCalendar = () => {
                     const response = await fetch('/api/recommend-activities', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ location: recLocation, kids, preferences: recPreferences })
+                        body: JSON.stringify({ location: recLocation, members, preferences: recPreferences })
                     });
                     if (response.ok) {
                         const data = await response.json();
@@ -364,9 +364,9 @@ const handleDisconnectCalendar = () => {
                 setRecLoading(false);
             };
 
-            const addRecommendedActivity = (rec, kidId) => {
+            const addRecommendedActivity = (rec, memberId) => {
                 setNewAct({
-                    kidId, title: rec.title, date: new Date().toISOString().split('T')[0], time: '', location: rec.venue || '',
+                    memberId, title: rec.title, date: new Date().toISOString().split('T')[0], time: '', location: rec.venue || '',
                     parent: 'Mom', notes: rec.notes || '', duration: rec.duration || 60, type: rec.type || 'Other',
                     notify: false, recurring: 'none', prepTasks: [], activityCategory: rec.category || 'Physical', createdBy: 'Mom'
                 });
@@ -397,9 +397,9 @@ const handleDisconnectCalendar = () => {
                     let groupKey;
                     
                     switch(groupBy) {
-                        case 'kid':
-                            const kid = kids.find(k => k.id === activity.kidId);
-                            groupKey = kid ? kid.name : 'Unknown Kid';
+                        case 'member':
+                            const member = members.find(m => m.id === activity.memberId);
+                            groupKey = member ? member.name : 'Unknown Member';
                             break;
                         case 'title':
                             groupKey = activity.title || 'Untitled';
@@ -473,7 +473,7 @@ const handleDisconnectCalendar = () => {
         </div>
         
         <p className="mb-4 text-white/90 text-sm">
-            Add, edit, or delete activities or just ask a question about activities
+            Add, edit, or delete appointments/activities or ask questions about your schedule
         </p>
         
         <textarea
@@ -495,19 +495,19 @@ const handleDisconnectCalendar = () => {
                     if (!nlText.trim()) return alert('Please type something');
                     setNlLoading(true);
                     try {
-                        const result = await APIService.parseActivity(nlText, kids, acts);
-                        
+                        const result = await APIService.parseActivity(nlText, members, acts);
+
                         if (result.action === 'add') {
-                            const matchingKid = kids.find(k => k.id === result.data.kidId);
-                            
-                            if (!matchingKid) {
-                                alert('Kid not found. Available: ' + kids.map(k => k.name).join(', '));
+                            const matchingMember = members.find(m => m.id === result.data.memberId);
+
+                            if (!matchingMember) {
+                                alert('Member not found. Available: ' + members.map(m => m.name).join(', '));
                                 setNlLoading(false);
                                 return;
                             }
                             
                             const newActivity = {
-                                kidId: result.data.kidId,
+                                memberId: result.data.memberId,
                                 title: result.data.title || '',
                                 date: result.data.date || '',
                                 time: result.data.time || '',
@@ -527,7 +527,7 @@ const handleDisconnectCalendar = () => {
                             await db.collection('activities').add(newActivity);
                             setShowNL(false);
                             setNlText('');
-                            alert('✅ Activity added!\n\n' + result.data.title + ' for ' + matchingKid.name + '\n' + result.data.date + ' at ' + result.data.time);
+                            alert('✅ Activity added!\n\n' + result.data.title + ' for ' + matchingMember.name + '\n' + result.data.date + ' at ' + result.data.time);
                             
                         } else if (result.action === 'edit') {
                             if (!result.data.activityId) {
@@ -614,14 +614,14 @@ const handleDisconnectCalendar = () => {
 
                         <div className="mb-8">
                             <div className="flex justify-between mb-4">
-                                <h2 className="text-xl font-bold">Kids</h2>
-                                <button onClick={() => setShowKid(true)} className="px-4 py-2 bg-blue-500 text-white rounded-lg">+ Add</button>
+                                <h2 className="text-xl font-bold">Members</h2>
+                                <button onClick={() => setShowMember(true)} className="px-4 py-2 bg-blue-500 text-white rounded-lg">+ Add</button>
                             </div>
                             <div className="flex gap-3 flex-wrap">
-                                {kids.map(k => (
-                                    <div key={k.id} className="flex items-center gap-2 px-4 py-2 rounded-full shadow-md" style={{ backgroundColor: k.color + '30' }}>
-                                        <span style={{ color: k.color }}>{k.name}</span>
-                                        <button onClick={() => delKid(k.id)} className="text-red-500">×</button>
+                                {members.map(m => (
+                                    <div key={m.id} className="flex items-center gap-2 px-4 py-2 rounded-full shadow-md" style={{ backgroundColor: m.color + '30' }}>
+                                        <span style={{ color: m.color }}>{m.name}</span>
+                                        <button onClick={() => delMember(m.id)} className="text-red-500">×</button>
                                     </div>
                                 ))}
                             </div>
@@ -697,17 +697,17 @@ const handleDisconnectCalendar = () => {
         )}
     </div>
 </div>
-                            
-                            {showKid && (
+
+                            {showMember && (
                                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                                    <input value={newKid.name} onChange={e => setNewKid({ ...newKid, name: e.target.value })} placeholder="Name" className="w-full px-4 py-2 border rounded mb-3" />
+                                    <input value={newMember.name} onChange={e => setNewMember({ ...newMember, name: e.target.value })} placeholder="Name" className="w-full px-4 py-2 border rounded mb-3" />
                                     <div className="flex gap-2 mb-3">
                                         {colors.map(c => (
-                                            <button key={c} onClick={() => setNewKid({ ...newKid, color: c })} className="w-8 h-8 rounded-full" style={{ backgroundColor: c, border: newKid.color === c ? '2px solid black' : 'none' }} />
+                                            <button key={c} onClick={() => setNewMember({ ...newMember, color: c })} className="w-8 h-8 rounded-full" style={{ backgroundColor: c, border: newMember.color === c ? '2px solid black' : 'none' }} />
                                         ))}
                                     </div>
-                                    <button onClick={addKid} className="px-4 py-2 bg-blue-500 text-white rounded mr-2">Add</button>
-                                    <button onClick={() => setShowKid(false)} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
+                                    <button onClick={addMember} className="px-4 py-2 bg-blue-500 text-white rounded mr-2">Add</button>
+                                    <button onClick={() => setShowMember(false)} className="px-4 py-2 bg-gray-300 rounded">Cancel</button>
                                 </div>
                             )}
                         </div>
@@ -720,30 +720,30 @@ const handleDisconnectCalendar = () => {
                         {mainView === 'balance' ? (
                             <div className="space-y-6">
                                 <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg">
-                                    <h3 className="text-2xl font-bold mb-4">📊 Parent Load Balance</h3>
+                                    <h3 className="text-2xl font-bold mb-4">📊 Responsibility Load Balance</h3>
                                     <div className="space-y-4">
                                         <div>
                                             <p className="text-sm font-semibold mb-2">Activities Created:</p>
                                             <div className="flex gap-4">
-                                                <div>Mom: <span className="font-bold text-2xl">{parentLoad.created.Mom || 0}</span></div>
-                                                <div>Dad: <span className="font-bold text-2xl">{parentLoad.created.Dad || 0}</span></div>
+                                                <div>Self: <span className="font-bold text-2xl">{parentLoad.created.Self || 0}</span></div>
+                                                <div>Partner: <span className="font-bold text-2xl">{parentLoad.created.Partner || 0}</span></div>
                                             </div>
                                         </div>
                                         <div>
                                             <p className="text-sm font-semibold mb-2">Activities Assigned:</p>
                                             <div className="flex gap-4">
-                                                <div>Mom: <span className="font-bold text-2xl">{parentLoad.balance.Mom || 0}</span></div>
-                                                <div>Dad: <span className="font-bold text-2xl">{parentLoad.balance.Dad || 0}</span></div>
+                                                <div>Self: <span className="font-bold text-2xl">{parentLoad.balance.Self || 0}</span></div>
+                                                <div>Partner: <span className="font-bold text-2xl">{parentLoad.balance.Partner || 0}</span></div>
                                                 <div>Both: <span className="font-bold text-2xl">{parentLoad.balance.Both || 0}</span></div>
                                             </div>
                                         </div>
-                                        {parentLoad.created.Mom > 0 || parentLoad.created.Dad > 0 ? (
+                                        {parentLoad.created.Self > 0 || parentLoad.created.Partner > 0 ? (
                                             <div className="mt-4 p-4 bg-white rounded-lg">
                                                 <p className="text-sm">
-                                                    {parentLoad.created.Mom > parentLoad.created.Dad * 2 ? 
-                                                        '💡 Dad: Help balance the mental load by creating more activities!' :
-                                                        parentLoad.created.Dad > parentLoad.created.Mom * 2 ?
-                                                        '💡 Mom: Help balance the mental load by creating more activities!' :
+                                                    {parentLoad.created.Self > parentLoad.created.Partner * 2 ?
+                                                        '💡 Partner: Help balance the mental load by creating more activities!' :
+                                                        parentLoad.created.Partner > parentLoad.created.Self * 2 ?
+                                                        '💡 Self: Help balance the mental load by creating more activities!' :
                                                         '✅ Great balance on activity creation!'}
                                                 </p>
                                             </div>
@@ -762,9 +762,9 @@ const handleDisconnectCalendar = () => {
                                                     <h4 className="font-bold text-lg mb-2">{cat}</h4>
                                                     <p className="text-sm text-gray-600 mb-2">Total: {data.total}</p>
                                                     <div className="flex gap-4">
-                                                        {Object.entries(data.byKid).map(([kidName, count]) => (
-                                                            <div key={kidName} className="text-sm">
-                                                                {kidName}: <span className="font-bold">{count}</span>
+                                                        {Object.entries(data.byMember).map(([memberName, count]) => (
+                                                            <div key={memberName} className="text-sm">
+                                                                {memberName}: <span className="font-bold">{count}</span>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -783,7 +783,7 @@ const handleDisconnectCalendar = () => {
                                             <select value={groupBy} onChange={e => setGroupBy(e.target.value)} className="px-3 py-2 border rounded bg-white">
                                                 <option value="none">No Grouping</option>
                                                 <option value="title">Group by Activity</option>
-                                                <option value="kid">Group by Kid</option>
+                                                <option value="member">Group by Member</option>
                                                 <option value="type">Group by Type</option>
                                                 <option value="parent">Group by Parent</option>
                                             </select>
@@ -820,9 +820,9 @@ const handleDisconnectCalendar = () => {
                                                             {rec.websiteUrl && <a href={rec.websiteUrl} target="_blank" className="text-xs text-blue-600 hover:underline">🔗 Visit Website</a>}
                                                             {rec.notes && <p className="text-sm text-gray-500 mb-2">{rec.notes}</p>}
                                                             <div className="flex flex-wrap gap-2 mt-2">
-                                                                {kids.map(kid => (
-                                                                    <button key={kid.id} onClick={() => addRecommendedActivity(rec, kid.id)} className="px-3 py-1 text-xs rounded-full text-white" style={{ backgroundColor: kid.color }}>
-                                                                        Add for {kid.name}
+                                                                {members.map(member => (
+                                                                    <button key={member.id} onClick={() => addRecommendedActivity(rec, member.id)} className="px-3 py-1 text-xs rounded-full text-white" style={{ backgroundColor: member.color }}>
+                                                                        Add for {member.name}
                                                                     </button>
                                                                 ))}
                                                             </div>
@@ -837,34 +837,37 @@ const handleDisconnectCalendar = () => {
                                 {showAct && (
                                     <div className="mb-4 p-4 bg-gray-50 rounded-lg">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            <select value={newAct.kidId} onChange={e => setNewAct({ ...newAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option value="">Select Kid</option>
-                                                {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+                                            <select value={newAct.memberId} onChange={e => setNewAct({ ...newAct, memberId: e.target.value })} className="px-4 py-2 border rounded">
+                                                <option value="">Select Member</option>
+                                                {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                             </select>
                                             <input value={newAct.title} onChange={e => { setNewAct({ ...newAct, title: e.target.value }); getSuggestedPrepTasks(e.target.value); }} placeholder="Activity" className="px-4 py-2 border rounded" />
                                             <input type="date" value={newAct.date} onChange={e => setNewAct({ ...newAct, date: e.target.value })} className="px-4 py-2 border rounded" />
                                             <input type="time" value={newAct.time} onChange={e => setNewAct({ ...newAct, time: e.target.value })} className="px-4 py-2 border rounded" />
                                             <input value={newAct.location} onChange={e => setNewAct({ ...newAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
                                             <select value={newAct.parent} onChange={e => setNewAct({ ...newAct, parent: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option>Mom</option>
-                                                <option>Dad</option>
+                                                <option>Self</option>
+                                                <option>Partner</option>
                                                 <option>Both</option>
                                             </select>
                                             <select value={newAct.type} onChange={e => setNewAct({ ...newAct, type: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option>Pick Up</option>
-                                                <option>Drop Off</option>
+                                                <option>Appointment</option>
+                                                <option>Service</option>
+                                                <option>Class</option>
+                                                <option>Visit</option>
                                                 <option>Other</option>
                                             </select>
                                             <select value={newAct.activityCategory} onChange={e => setNewAct({ ...newAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option>Physical</option>
-                                                <option>Social</option>
-                                                <option>Creative</option>
-                                                <option>Academic</option>
+                                                <option>Health</option>
+                                                <option>Wellness</option>
+                                                <option>Professional</option>
+                                                <option>Recreation</option>
+                                                <option>Personal</option>
                                                 <option>Other</option>
                                             </select>
                                             <select value={newAct.createdBy} onChange={e => setNewAct({ ...newAct, createdBy: e.target.value })} className="px-4 py-2 border rounded">
-                                                <option>Mom</option>
-                                                <option>Dad</option>
+                                                <option>Self</option>
+                                                <option>Partner</option>
                                             </select>
                                             <select value={newAct.recurring} onChange={e => setNewAct({ ...newAct, recurring: e.target.value })} className="px-4 py-2 border rounded">
                                                 <option value="none">One-time</option>
@@ -916,7 +919,7 @@ const handleDisconnectCalendar = () => {
                                             // Simple list view (no grouping)
                                             <div className="space-y-3">
                                                 {upcoming.length === 0 ? <p className="text-gray-500 text-center py-4">No upcoming activities</p> : upcoming.map(a => {
-                                            const kid = kids.find(k => k.id === a.kidId);
+                                            const member = members.find(m => m.id === a.memberId);
                                             const isExpanded = expandedActivities[a.id];
                                             const isEditing = editAct?.id === a.id;
                                             return (
@@ -926,29 +929,32 @@ const handleDisconnectCalendar = () => {
                                                         <div className="space-y-3">
                                                             <h3 className="font-bold text-lg mb-3">✏️ Edit Activity</h3>
                                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                                <select value={editAct.kidId} onChange={e => setEditAct({ ...editAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
-                                                                    <option value="">Select Kid</option>
-                                                                    {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+                                                                <select value={editAct.memberId} onChange={e => setEditAct({ ...editAct, memberId: e.target.value })} className="px-4 py-2 border rounded">
+                                                                    <option value="">Select Member</option>
+                                                                    {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                                                 </select>
                                                                 <input value={editAct.title} onChange={e => setEditAct({ ...editAct, title: e.target.value })} placeholder="Activity" className="px-4 py-2 border rounded" />
                                                                 <input type="date" value={editAct.date} onChange={e => setEditAct({ ...editAct, date: e.target.value })} className="px-4 py-2 border rounded" />
                                                                 <input type="time" value={editAct.time} onChange={e => setEditAct({ ...editAct, time: e.target.value })} className="px-4 py-2 border rounded" />
                                                                 <input value={editAct.location} onChange={e => setEditAct({ ...editAct, location: e.target.value })} placeholder="Location" className="px-4 py-2 border rounded" />
                                                                 <select value={editAct.parent} onChange={e => setEditAct({ ...editAct, parent: e.target.value })} className="px-4 py-2 border rounded">
-                                                                    <option>Mom</option>
-                                                                    <option>Dad</option>
+                                                                    <option>Self</option>
+                                                                    <option>Partner</option>
                                                                     <option>Both</option>
                                                                 </select>
                                                                 <select value={editAct.type} onChange={e => setEditAct({ ...editAct, type: e.target.value })} className="px-4 py-2 border rounded">
-                                                                    <option>Pick Up</option>
-                                                                    <option>Drop Off</option>
+                                                                    <option>Appointment</option>
+                                                                    <option>Service</option>
+                                                                    <option>Class</option>
+                                                                    <option>Visit</option>
                                                                     <option>Other</option>
                                                                 </select>
                                                                 <select value={editAct.activityCategory} onChange={e => setEditAct({ ...editAct, activityCategory: e.target.value })} className="px-4 py-2 border rounded">
-                                                                    <option>Physical</option>
-                                                                    <option>Social</option>
-                                                                    <option>Creative</option>
-                                                                    <option>Academic</option>
+                                                                    <option>Health</option>
+                                                                    <option>Wellness</option>
+                                                                    <option>Professional</option>
+                                                                    <option>Recreation</option>
+                                                                    <option>Personal</option>
                                                                     <option>Other</option>
                                                                 </select>
                                                             </div>
@@ -1008,21 +1014,21 @@ const handleDisconnectCalendar = () => {
                                         {groupNames.map(groupName => {
                                             const groupActivities = groupedUpcoming[groupName];
                                             const isGroupExpanded = expandedGroups[groupName];
-                                            const groupKid = groupBy === 'kid' ? kids.find(k => k.name === groupName) : null;
-                                            
+                                            const groupMember = groupBy === 'member' ? members.find(m => m.name === groupName) : null;
+
                                             return (
-                                                <div key={groupName} className="border-2 rounded-lg overflow-hidden shadow-lg" style={{ borderColor: groupKid?.color || '#e5e7eb' }}>
+                                                <div key={groupName} className="border-2 rounded-lg overflow-hidden shadow-lg" style={{ borderColor: groupMember?.color || '#e5e7eb' }}>
                                                     {/* Group Header - Clickable Card */}
-                                                    <div 
+                                                    <div
                                                         onClick={() => setExpandedGroups(prev => ({ ...prev, [groupName]: !prev[groupName] }))}
                                                         className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                                                        style={{ backgroundColor: groupKid ? groupKid.color + '20' : '#f9fafb' }}
+                                                        style={{ backgroundColor: groupMember ? groupMember.color + '20' : '#f9fafb' }}
                                                     >
                                                         <div className="flex justify-between items-center">
                                                             <div className="flex items-center gap-3">
                                                                 <span className="text-2xl">{isGroupExpanded ? '▼' : '▶'}</span>
                                                                 <div>
-                                                                    <h3 className="text-xl font-bold" style={{ color: groupKid?.color || '#1f2937' }}>
+                                                                    <h3 className="text-xl font-bold" style={{ color: groupMember?.color || '#1f2937' }}>
                                                                         {groupName}
                                                                     </h3>
                                                                     <p className="text-sm text-gray-600">
@@ -1040,9 +1046,9 @@ const handleDisconnectCalendar = () => {
                                                     
                                                     {/* Group Activities - Shown when expanded */}
                                                     {isGroupExpanded && (
-                                                        <div className="p-4 bg-white space-y-3 border-t-2" style={{ borderTopColor: groupKid?.color || '#e5e7eb' }}>
+                                                        <div className="p-4 bg-white space-y-3 border-t-2" style={{ borderTopColor: groupMember?.color || '#e5e7eb' }}>
                                                             {groupActivities.map(a => {
-                                                                const kid = kids.find(k => k.id === a.kidId);
+                                                                const member = members.find(m => m.id === a.memberId);
                                                                 const isExpanded = expandedActivities[a.id];
                                                                 const isEditing = editAct?.id === a.id;
                                                                 
@@ -1053,7 +1059,7 @@ const handleDisconnectCalendar = () => {
                                                                             <div className="space-y-3">
                                                                                 <h3 className="font-bold text-lg mb-3">✏️ Edit Activity</h3>
                                                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                                                    <select value={editAct.kidId} onChange={e => setEditAct({ ...editAct, kidId: e.target.value })} className="px-4 py-2 border rounded">
+                                                                                    <select value={editAct.memberId} onChange={e => setEditAct({ ...editAct, memberId: e.target.value })} className="px-4 py-2 border rounded">
                                                                                         <option value="">Select Kid</option>
                                                                                         {kids.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
                                                                                     </select>

@@ -20,11 +20,11 @@ const APP_CONFIG = {
     },
     
     // App Settings (change these to customize behavior)
-    APP_NAME: 'Family Activity Coordinator',
-    DEFAULT_PARENT: 'Mom',
-    DEFAULT_ACTIVITY_TYPE: 'Pick Up',
+    APP_NAME: 'Local Amenities Finder',
+    DEFAULT_PARENT: 'Self',
+    DEFAULT_ACTIVITY_TYPE: 'Appointment',
     DEFAULT_DURATION: 60,
-    DEFAULT_CATEGORY: 'Physical',
+    DEFAULT_CATEGORY: 'Health',
     
     // API Endpoints (change if backend structure changes)
     ENDPOINTS: {
