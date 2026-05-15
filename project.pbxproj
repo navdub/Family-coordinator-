@@ -1,0 +1,222 @@
+// !$*UTF8*$!
+{
+  archiveVersion = 1;
+  classes = {};
+  objectVersion = 55;
+  objects = {
+
+    8B0E3D821F2446C3B9A12345 /* Project object */ = {
+      isa = PBXProject;
+      attributes = {
+        LastUpgradeCheck = 1600;
+        ORGANIZATIONNAME = "Your Company";
+        TargetAttributes = {
+          8B0E3D861F2446C3B9A12345 = {
+            CreatedOnToolsVersion = 1600;
+          };
+        };
+      };
+      buildConfigurationList = 8B0E3D9B1F2446C3B9A12345 /* Build configuration list for PBXProject */;
+      compatibilityVersion = "Xcode 15.0";
+      developmentRegion = en;
+      hasScannedForEncodings = 0;
+      knownRegions = (
+        en,
+      );
+      mainGroup = 8B0E3D831F2446C3B9A12345 /* Project main group */;
+      productRefGroup = 8B0E3D851F2446C3B9A12345 /* Products */;
+      projectDirPath = "";
+      projectRoot = "";
+      targets = (
+        8B0E3D861F2446C3B9A12345 /* FamilyCoordinator */,
+      );
+    };
+
+    8B0E3D831F2446C3B9A12345 /* Project main group */ = {
+      isa = PBXGroup;
+      children = (
+        8B0E3D841F2446C3B9A12345 /* FamilyCoordinator */,
+        8B0E3D851F2446C3B9A12345 /* Products */,
+      );
+      sourceTree = "<group>";
+      path = "";
+    };
+
+    8B0E3D841F2446C3B9A12345 /* FamilyCoordinator */ = {
+      isa = PBXGroup;
+      children = (
+        8B0E3D8B1F2446C3B9A12345 /* FamilyCoordinatorApp.swift */,
+        8B0E3D8C1F2446C3B9A12345 /* AppState.swift */,
+        8B0E3D8D1F2446C3B9A12345 /* FirebaseService.swift */,
+        8B0E3D8E1F2446C3B9A12345 /* APIService.swift */,
+        8B0E3D8F1F2446C3B9A12345 /* Views.swift */,
+        8B0E3D901F2446C3B9A12345 /* Info.plist */,
+      );
+      sourceTree = "<group>";
+      name = "FamilyCoordinator";
+      path = "Sources/FamilyCoordinator";
+    };
+
+    8B0E3D851F2446C3B9A12345 /* Products */ = {
+      isa = PBXGroup;
+      children = (
+        8B0E3D921F2446C3B9A12345 /* FamilyCoordinator.app */,
+      );
+      sourceTree = "<group>";
+      name = Products;
+    };
+
+    8B0E3D8B1F2446C3B9A12345 /* FamilyCoordinatorApp.swift */ = {
+      isa = PBXFileReference;
+      lastKnownFileType = sourcecode.swift;
+      name = "FamilyCoordinatorApp.swift";
+      path = "FamilyCoordinatorApp.swift";
+      sourceTree = "<group>";
+    };
+    8B0E3D8C1F2446C3B9A12345 /* AppState.swift */ = {
+      isa = PBXFileReference;
+      lastKnownFileType = sourcecode.swift;
+      name = "AppState.swift";
+      path = "AppState.swift";
+      sourceTree = "<group>";
+    };
+    8B0E3D8D1F2446C3B9A12345 /* FirebaseService.swift */ = {
+      isa = PBXFileReference;
+      lastKnownFileType = sourcecode.swift;
+      name = "FirebaseService.swift";
+      path = "FirebaseService.swift";
+      sourceTree = "<group>";
+    };
+    8B0E3D8E1F2446C3B9A12345 /* APIService.swift */ = {
+      isa = PBXFileReference;
+      lastKnownFileType = sourcecode.swift;
+      name = "APIService.swift";
+      path = "APIService.swift";
+      sourceTree = "<group>";
+    };
+    8B0E3D8F1F2446C3B9A12345 /* Views.swift */ = {
+      isa = PBXFileReference;
+      lastKnownFileType = sourcecode.swift;
+      name = "Views.swift";
+      path = "Views.swift";
+      sourceTree = "<group>";
+    };
+    8B0E3D901F2446C3B9A12345 /* Info.plist */ = {
+      isa = PBXFileReference;
+      lastKnownFileType = text.plist.xml;
+      name = "Info.plist";
+      path = "Info.plist";
+      sourceTree = "<group>";
+    };
+
+    8B0E3D911F2446C3B9A12345 /* FamilyCoordinatorApp.swift in Sources */ = {
+      isa = PBXBuildFile;
+      fileRef = 8B0E3D8B1F2446C3B9A12345 /* FamilyCoordinatorApp.swift */;
+    };
+    8B0E3D921F2446C3B9A12345 /* FamilyCoordinator.app */ = {
+      isa = PBXFileReference;
+      explicitFileType = "wrapper.application";
+      path = "FamilyCoordinator.app";
+      sourceTree = "BUILT_PRODUCTS_DIR";
+    };
+    8B0E3D931F2446C3B9A12345 /* AppState.swift in Sources */ = {
+      isa = PBXBuildFile;
+      fileRef = 8B0E3D8C1F2446C3B9A12345 /* AppState.swift */;
+    };
+    8B0E3D941F2446C3B9A12345 /* FirebaseService.swift in Sources */ = {
+      isa = PBXBuildFile;
+      fileRef = 8B0E3D8D1F2446C3B9A12345 /* FirebaseService.swift */;
+    };
+    8B0E3D951F2446C3B9A12345 /* APIService.swift in Sources */ = {
+      isa = PBXBuildFile;
+      fileRef = 8B0E3D8E1F2446C3B9A12345 /* APIService.swift */;
+    };
+    8B0E3D961F2446C3B9A12345 /* Views.swift in Sources */ = {
+      isa = PBXBuildFile;
+      fileRef = 8B0E3D8F1F2446C3B9A12345 /* Views.swift */;
+    };
+    8B0E3D971F2446C3B9A12345 /* Sources */ = {
+      isa = PBXSourcesBuildPhase;
+      buildActionMask = 2147483647;
+      files = (
+        8B0E3D911F2446C3B9A12345 /* FamilyCoordinatorApp.swift in Sources */,
+        8B0E3D931F2446C3B9A12345 /* AppState.swift in Sources */,
+        8B0E3D941F2446C3B9A12345 /* FirebaseService.swift in Sources */,
+        8B0E3D951F2446C3B9A12345 /* APIService.swift in Sources */,
+        8B0E3D961F2446C3B9A12345 /* Views.swift in Sources */,
+      );
+      runOnlyForDeploymentPostprocessing = 0;
+    };
+
+    8B0E3D981F2446C3B9A12345 /* FamilyCoordinator */ = {
+      isa = PBXNativeTarget;
+      buildConfigurationList = 8B0E3D9C1F2446C3B9A12345 /* Build configuration list for PBXNativeTarget */;
+      buildPhases = (
+        8B0E3D971F2446C3B9A12345 /* Sources */,
+      );
+      buildRules = ();
+      dependencies = ();
+      name = "FamilyCoordinator";
+      productName = "FamilyCoordinator";
+      productReference = 8B0E3D921F2446C3B9A12345 /* FamilyCoordinator.app */;
+      productType = "com.apple.product-type.application";
+    };
+
+    8B0E3D991F2446C3B9A12345 /* Debug */ = {
+      isa = XCBuildConfiguration;
+      buildSettings = {
+        ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+        CODE_SIGN_STYLE = Automatic;
+        DEVELOPMENT_TEAM = "";
+        IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+        INFOPLIST_FILE = "Sources/FamilyCoordinator/Info.plist";
+        PRODUCT_BUNDLE_IDENTIFIER = "com.yourcompany.FamilyCoordinator";
+        PRODUCT_NAME = "$(TARGET_NAME)";
+        SDKROOT = iphoneos;
+        SWIFT_VERSION = 5.9;
+        TARGETED_DEVICE_FAMILY = "1,2";
+      };
+      name = Debug;
+    };
+
+    8B0E3D9A1F2446C3B9A12345 /* Release */ = {
+      isa = XCBuildConfiguration;
+      buildSettings = {
+        ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+        CODE_SIGN_STYLE = Automatic;
+        DEVELOPMENT_TEAM = "";
+        IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+        INFOPLIST_FILE = "Sources/FamilyCoordinator/Info.plist";
+        PRODUCT_BUNDLE_IDENTIFIER = "com.yourcompany.FamilyCoordinator";
+        PRODUCT_NAME = "$(TARGET_NAME)";
+        SDKROOT = iphoneos;
+        SWIFT_VERSION = 5.9;
+        TARGETED_DEVICE_FAMILY = "1,2";
+        SWIFT_OPTIMIZATION_LEVEL = "-O";
+      };
+      name = Release;
+    };
+
+    8B0E3D9B1F2446C3B9A12345 /* Build configuration list for PBXProject */ = {
+      isa = XCConfigurationList;
+      buildConfigurations = (
+        8B0E3D991F2446C3B9A12345 /* Debug */,
+        8B0E3D9A1F2446C3B9A12345 /* Release */,
+      );
+      defaultConfigurationIsVisible = 0;
+      defaultConfigurationName = Release;
+    };
+
+    8B0E3D9C1F2446C3B9A12345 /* Build configuration list for PBXNativeTarget */ = {
+      isa = XCConfigurationList;
+      buildConfigurations = (
+        8B0E3D991F2446C3B9A12345 /* Debug */,
+        8B0E3D9A1F2446C3B9A12345 /* Release */,
+      );
+      defaultConfigurationIsVisible = 0;
+      defaultConfigurationName = Release;
+    };
+
+  };
+  rootObject = 8B0E3D821F2446C3B9A12345 /* Project object */;
+}
